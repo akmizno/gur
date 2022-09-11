@@ -1,5 +1,6 @@
 //! Example
-//! ```
+//!
+//! ```rust
 //! use gur::gur::{GurBuilder, Gur};
 //! use gur::action::Action;
 //! use gur::memento::Memento;
@@ -27,19 +28,20 @@
 //! }
 //!
 //! fn main() {
-//!     let mut ur = GurBuilder::new().build(MyState(0));
+//!     let mut gur = GurBuilder::new().build(MyState(0));
 //!
-//!     ur.act(Add(1));
-//!     assert_eq!(1, ur.0);
+//!     gur.act(Add(1));
+//!     assert_eq!(1, gur.0);
 //!
-//!     ur.undo().unwrap();
-//!     assert_eq!(0, ur.0);
+//!     gur.undo().unwrap();
+//!     assert_eq!(0, gur.0);
 //!
-//!     ur.redo().unwrap();
-//!     assert_eq!(1, ur.0);
+//!     gur.redo().unwrap();
+//!     assert_eq!(1, gur.0);
 //! }
 //! ```
+
 pub mod action;
 pub mod gur;
 pub mod memento;
-pub(crate) mod node;
+mod node;
