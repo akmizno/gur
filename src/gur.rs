@@ -3,50 +3,50 @@ use crate::memento::Memento;
 use crate::node::Node;
 use std::iter::Iterator;
 
-pub struct UrBuilder;
+pub struct GurBuilder;
 
-impl UrBuilder {
+impl GurBuilder {
     pub fn new() -> Self {
         Self {}
     }
 
-    pub fn build<'a, T: Memento + 'a>(self, initial_state: T) -> Ur<'a, T> {
-        Ur::new(initial_state)
+    pub fn build<'a, T: Memento + 'a>(self, initial_state: T) -> Gur<'a, T> {
+        Gur::new(initial_state)
     }
 }
 
-impl Default for UrBuilder {
+impl Default for GurBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-pub struct Ur<'a, T: Memento> {
+pub struct Gur<'a, T: Memento> {
     state: Option<T>,
 
     actions: Vec<Node<'a, T>>,
     current: usize,
 }
 
-impl<'a, T: Default + Memento + 'a> Default for Ur<'a, T> {
+impl<'a, T: Default + Memento + 'a> Default for Gur<'a, T> {
     fn default() -> Self {
         Self::new(T::default())
     }
 }
-impl<'a, T: std::fmt::Display + Memento> std::fmt::Display for Ur<'a, T> {
+impl<'a, T: std::fmt::Display + Memento> std::fmt::Display for Gur<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.get().fmt(f)
     }
 }
 
-impl<'a, T: Memento> std::ops::Deref for Ur<'a, T> {
+impl<'a, T: Memento> std::ops::Deref for Gur<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.get()
     }
 }
 
-impl<'a, T: Memento + 'a> Ur<'a, T> {
+impl<'a, T: Memento + 'a> Gur<'a, T> {
     fn new(initial_state: T) -> Self {
         let first_node = Node::from_memento(&initial_state);
         Self {
@@ -152,7 +152,7 @@ impl<'a, T: Memento + 'a> Ur<'a, T> {
     }
 }
 
-impl<'a, T: Memento + 'a> Ur<'a, T> {
+impl<'a, T: Memento + 'a> Gur<'a, T> {
     pub fn try_act<A>(&mut self, action: A) -> Result<&T, Box<dyn std::error::Error>>
     where
         A: TryAction<State = T>,
@@ -237,14 +237,14 @@ mod test {
 
     #[test]
     fn ok_add() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = GurBuilder::new().build(0);
 
         let t1 = s.try_act(OkAdd(1)).unwrap();
         assert_eq!(1, *t1);
     }
     #[test]
     fn err_add() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = GurBuilder::new().build(0);
 
         assert_eq!(0, *s);
 
@@ -262,7 +262,7 @@ mod test {
     }
     #[test]
     fn deref() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = GurBuilder::new().build(0);
 
         s.act(Add(1));
         assert_eq!(1, *s);
@@ -280,7 +280,7 @@ mod test {
 
     #[test]
     fn undo() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = GurBuilder::new().build(0);
 
         let t0 = *s.get();
         assert_eq!(0, t0);
@@ -316,7 +316,7 @@ mod test {
     fn undo_redo_many() {
         let n = 100000;
 
-        let mut s = UrBuilder::new().build(0);
+        let mut s = GurBuilder::new().build(0);
 
         for i in 0..n {
             if i % 10 == 0 {
@@ -341,7 +341,7 @@ mod test {
 
     #[test]
     fn redo() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = GurBuilder::new().build(0);
 
         let t0 = *s.get();
         assert_eq!(0, t0);
@@ -381,7 +381,7 @@ mod test {
 
     #[test]
     fn act_undo_act() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = GurBuilder::new().build(0);
 
         let t0 = s.get();
         assert_eq!(0, *t0);
@@ -399,7 +399,7 @@ mod test {
 
     #[test]
     fn act_undo_act_act_undo_redo() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = GurBuilder::new().build(0);
 
         let t0 = *s.get();
         assert_eq!(0, t0);

@@ -1,8 +1,8 @@
 //! Example
 //! ```
-//! use ur::ur::{UrBuilder, Ur};
-//! use ur::action::Action;
-//! use ur::memento::Memento;
+//! use gur::gur::{GurBuilder, Gur};
+//! use gur::action::Action;
+//! use gur::memento::Memento;
 //!
 //! #[derive(Clone)]
 //! struct MyState(i32);
@@ -27,7 +27,7 @@
 //! }
 //!
 //! fn main() {
-//!     let mut ur = UrBuilder::new().build(MyState(0));
+//!     let mut ur = GurBuilder::new().build(MyState(0));
 //!
 //!     ur.act(Add(1));
 //!     assert_eq!(1, ur.0);
@@ -40,6 +40,6 @@
 //! }
 //! ```
 pub mod action;
+pub mod gur;
 pub mod memento;
 pub(crate) mod node;
-pub mod ur;
