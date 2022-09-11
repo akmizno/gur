@@ -1,0 +1,12 @@
+[package]
+name = "ur"
+version = "0.1.0"
+edition = "2021"
+authors = ["Akira Mizuno <akmizno@gmail.com>"]
+description = "A undo/redo framework"
+keywords = ["gzip"]
+repository = "https://github.com/akmizno/ur"
+license = "MIT/Apache-2.0"
+
+[dependencies]
+
