@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Akira Mizuno <akmizno@gmail.com>"]
 description = "A undo/redo framework"
-keywords = ["gzip"]
+keywords = ["undo", "redo"]
+categories = ["data-structures", "rust-patterns"]
 repository = "https://github.com/akmizno/gur"
 license = "MIT/Apache-2.0"
 
