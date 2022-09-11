@@ -1,10 +1,10 @@
 /// Store and restore object's state.
 ///
-/// [`Ur<T>`](crate::ur::Ur) requires T implementing [`Memento`] to take a snapshot of its internal state.
+/// [`Gur<T>`](crate::gur::Gur) requires T implementing [`Memento`] to take a snapshot of its internal state.
 ///
 /// A simplest way to implement this trait is by cloning itself.
 /// ```
-/// # use ur::memento::Memento;
+/// # use gur::memento::Memento;
 ///
 /// #[derive(Clone)]
 /// struct MyState(String);

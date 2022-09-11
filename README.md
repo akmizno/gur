@@ -1,4 +1,4 @@
-# ur
+# gur
 A undo/redo framework.
 
 ## Features
