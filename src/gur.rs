@@ -1,22 +1,35 @@
 use crate::action::{Action, TryAction};
 use crate::memento::Memento;
+use crate::metrics::Metrics;
 use crate::node::{Creator, Node};
 use std::iter::Iterator;
 use std::time::{Duration, Instant};
 
-pub struct GurBuilder;
+pub struct GurBuilder<'a> {
+    snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
+}
 
-impl GurBuilder {
+impl<'a> GurBuilder<'a> {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            snapshot_trigger: Box::new(|_m| false),
+        }
     }
 
-    pub fn build<'a, T: Memento + 'a>(self, initial_state: T) -> Gur<'a, T> {
-        Gur::new(initial_state)
+    pub fn snapshot_trigger<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(&Metrics) -> bool + 'a,
+    {
+        self.snapshot_trigger = Box::new(f);
+        self
+    }
+
+    pub fn build<T: Memento + 'a>(self, initial_state: T) -> Gur<'a, T> {
+        Gur::new(initial_state, self.snapshot_trigger)
     }
 }
 
-impl Default for GurBuilder {
+impl<'a> Default for GurBuilder<'a> {
     fn default() -> Self {
         Self::new()
     }
@@ -27,11 +40,13 @@ pub struct Gur<'a, T: Memento> {
 
     actions: Vec<Node<'a, T>>,
     current: usize,
+
+    snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
 }
 
 impl<'a, T: Default + Memento + 'a> Default for Gur<'a, T> {
     fn default() -> Self {
-        Self::new(T::default())
+        GurBuilder::new().build(T::default())
     }
 }
 impl<'a, T: std::fmt::Display + Memento> std::fmt::Display for Gur<'a, T> {
@@ -48,12 +63,13 @@ impl<'a, T: Memento> std::ops::Deref for Gur<'a, T> {
 }
 
 impl<'a, T: Memento + 'a> Gur<'a, T> {
-    fn new(initial_state: T) -> Self {
+    fn new(initial_state: T, snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>) -> Self {
         let first_node = Node::from_memento(&initial_state);
         Self {
             state: Some(initial_state),
             actions: vec![first_node],
             current: 0,
+            snapshot_trigger,
         }
     }
     pub fn get(&self) -> &T {
@@ -156,10 +172,15 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
         let (new_state, elapsed) = Self::act_impl(&action, old_state);
 
         self.actions.truncate(self.current + 1);
-        let last_node = self.actions.last().unwrap();
 
-        self.actions
-            .push(last_node.next_action_node(action, elapsed));
+        let last_metrics = self.actions.last().unwrap().metrics();
+        let action_metrics = last_metrics.make_next(elapsed);
+
+        if (self.snapshot_trigger)(&action_metrics) {
+            self.actions.push(Node::from_memento(&new_state));
+        } else {
+            self.actions.push(Node::from_action(action, action_metrics));
+        }
 
         self.current += 1;
 
@@ -332,15 +353,13 @@ mod test {
     fn undo_redo_many() {
         let n = 100000;
 
-        let mut s = GurBuilder::new().build(0);
+        let mut s = GurBuilder::new()
+            // To speed up undo()/redo(), a memento is sometimes created.
+            .snapshot_trigger(|metrics| 10 < metrics.distance_from_snapshot())
+            .build(0);
 
         for i in 0..n {
-            if i % 10 == 0 {
-                // To speed up undo()/redo(), a memento is sometimes inserted.
-                s.try_act(OkAdd(1)).unwrap();
-            } else {
-                s.act(Add(1));
-            }
+            s.act(Add(1));
             assert_eq!(i + 1, *s);
         }
 

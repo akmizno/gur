@@ -1,7 +1,6 @@
 use crate::action::Action;
 use crate::memento::Memento;
 use crate::metrics::Metrics;
-use std::time::Duration;
 
 pub(crate) enum Creator<'a, T: Memento> {
     Action(Box<dyn Action<State = T> + 'a>),
@@ -36,14 +35,10 @@ pub(crate) struct Node<'a, T: Memento> {
 }
 
 impl<'a, T: Memento> Node<'a, T> {
-    pub(crate) fn next_action_node<A: Action<State = T> + 'a>(
-        &self,
-        action: A,
-        act_time: Duration,
-    ) -> Self {
+    pub(crate) fn from_action<A: Action<State = T> + 'a>(action: A, metrics: Metrics) -> Self {
         Self {
             creator: Creator::from_action(action),
-            metrics: self.metrics.make_next(act_time),
+            metrics: metrics,
         }
     }
     pub(crate) fn from_memento(state: &T) -> Self {
