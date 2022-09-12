@@ -1,35 +1,35 @@
 use std::time::Duration;
 
 pub struct Metrics {
-    exec_time: Duration,
-    time_from_snapshot: Duration,
+    elapsed: Duration,
+    elapsed_from_snapshot: Duration,
     distance: usize,
 }
 
 impl Metrics {
-    pub fn zero() -> Self {
+    pub(crate) fn zero() -> Self {
         Self {
-            exec_time: Duration::ZERO,
-            time_from_snapshot: Duration::ZERO,
+            elapsed: Duration::ZERO,
+            elapsed_from_snapshot: Duration::ZERO,
             distance: 0,
         }
     }
 
-    pub fn exec_time(&self) -> Duration {
-        self.exec_time
+    pub fn elapsed(&self) -> Duration {
+        self.elapsed
     }
-    pub fn time_from_snapshot(&self) -> Duration {
-        self.time_from_snapshot
+    pub fn elapsed_from_snapshot(&self) -> Duration {
+        self.elapsed_from_snapshot
     }
     pub fn distance_from_snapshot(&self) -> usize {
         self.distance
     }
 
     pub(crate) fn make_next(&self, next_duration: Duration) -> Self {
-        let accumulated = next_duration + self.time_from_snapshot();
+        let accumulated = next_duration + self.elapsed_from_snapshot();
         Self {
-            exec_time: next_duration,
-            time_from_snapshot: accumulated,
+            elapsed: next_duration,
+            elapsed_from_snapshot: accumulated,
             distance: 1 + self.distance_from_snapshot(),
         }
     }
