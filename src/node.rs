@@ -1,14 +1,13 @@
-use crate::action::Action;
 use crate::memento::Memento;
 use crate::metrics::Metrics;
 
 pub(crate) enum Creator<'a, T: Memento> {
-    Action(Box<dyn Action<State = T> + 'a>),
+    Action(Box<dyn Fn(T) -> T + 'a>),
     Snapshot(Box<T::Target>),
 }
 
 impl<'a, T: Memento> Creator<'a, T> {
-    pub(crate) fn from_action<A: Action<State = T> + 'a>(action: A) -> Self {
+    pub(crate) fn from_action<F: Fn(T) -> T + 'a>(action: F) -> Self {
         Creator::Action(Box::new(action))
     }
     pub(crate) fn from_memento(state: &T) -> Self {
@@ -21,7 +20,7 @@ impl<'a, T: Memento> Creator<'a, T> {
             _ => None,
         }
     }
-    pub(crate) fn get_if_action(&self) -> Option<&(dyn Action<State = T> + 'a)> {
+    pub(crate) fn get_if_action(&self) -> Option<&(dyn Fn(T) -> T + 'a)> {
         match self {
             Self::Action(a) => Some(&**a),
             _ => None,
@@ -35,7 +34,7 @@ pub(crate) struct Node<'a, T: Memento> {
 }
 
 impl<'a, T: Memento> Node<'a, T> {
-    pub(crate) fn from_action<A: Action<State = T> + 'a>(action: A, metrics: Metrics) -> Self {
+    pub(crate) fn from_action<F: Fn(T) -> T + 'a>(action: F, metrics: Metrics) -> Self {
         Self {
             creator: Creator::from_action(action),
             metrics: metrics,

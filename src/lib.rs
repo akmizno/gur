@@ -2,7 +2,6 @@
 //!
 //! ```rust
 //! use gur::gur::{GurBuilder, Gur};
-//! use gur::action::Action;
 //! use gur::memento::Memento;
 //!
 //! #[derive(Clone)]
@@ -18,19 +17,10 @@
 //!     }
 //! }
 //!
-//! struct Add(i32);
-//!
-//! impl Action for Add {
-//!     type State = MyState;
-//!     fn execute(&self, prev: Self::State) -> Self::State {
-//!         MyState(prev.0 + self.0)
-//!     }
-//! }
-//!
 //! fn main() {
 //!     let mut gur = GurBuilder::new().build(MyState(0));
 //!
-//!     gur.act(Add(1));
+//!     gur.act(|state| MyState(state.0 + 1));
 //!     assert_eq!(1, gur.0);
 //!
 //!     gur.undo().unwrap();
@@ -40,8 +30,6 @@
 //!     assert_eq!(1, gur.0);
 //! }
 //! ```
-
-pub mod action;
 pub mod gur;
 pub mod memento;
 pub mod metrics;

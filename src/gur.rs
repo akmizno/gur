@@ -1,4 +1,3 @@
-use crate::action::{Action, TryAction};
 use crate::memento::Memento;
 use crate::metrics::Metrics;
 use crate::node::{Creator, Node};
@@ -122,7 +121,7 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
             debug_assert!(i < self.actions.len());
             let action = self.actions[i].creator().get_if_action().unwrap();
 
-            let next = action.execute(prev);
+            let next = action(prev);
             self.state = Some(next);
         }
     }
@@ -131,7 +130,7 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
         let node = &self.actions[self.current + 1];
         let new_state = match node.creator() {
             Creator::Snapshot(m) => T::from_memento(m),
-            Creator::Action(a) => a.execute(self.state.take().unwrap()),
+            Creator::Action(a) => a(self.state.take().unwrap()),
         };
         self.state = Some(new_state);
     }
@@ -146,24 +145,24 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
             debug_assert!(i < self.actions.len());
             let action = self.actions[i].creator().get_if_action().unwrap();
 
-            let next = action.execute(prev);
+            let next = action(prev);
             self.state = Some(next);
         }
     }
 
-    fn act_impl<A>(action: &A, old_state: T) -> (T, Duration)
+    fn act_impl<F>(action: &F, old_state: T) -> (T, Duration)
     where
-        A: Action<State = T> + 'a,
+        F: Fn(T) -> T + 'a,
     {
         let now = Instant::now();
-        let new_state = action.execute(old_state);
+        let new_state = action(old_state);
         let elapsed = now.elapsed();
 
         (new_state, elapsed)
     }
-    pub fn act<A>(&mut self, action: A) -> &T
+    pub fn act<F>(&mut self, action: F) -> &T
     where
-        A: Action<State = T> + 'a,
+        F: Fn(T) -> T + 'a,
     {
         debug_assert!(self.state.is_some());
 
@@ -187,17 +186,15 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
         self.state.replace(new_state);
         self.get()
     }
-}
 
-impl<'a, T: Memento + 'a> Gur<'a, T> {
-    pub fn try_act<A>(&mut self, action: A) -> Result<&T, Box<dyn std::error::Error>>
+    pub fn try_act<F>(&mut self, action: F) -> Result<&T, Box<dyn std::error::Error>>
     where
-        A: TryAction<State = T>,
+        F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,
     {
         debug_assert!(self.state.is_some());
 
         let old_state = unsafe { self.state.take().unwrap_unchecked() };
-        match action.try_execute(old_state) {
+        match action(old_state) {
             Ok(new_state) => {
                 self.actions.truncate(self.current + 1);
                 self.actions.push(Node::from_memento(&new_state));
@@ -216,18 +213,7 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::action::{Action, TryAction};
     use crate::memento::Memento;
-
-    #[derive(Debug)]
-    struct Add(i32);
-
-    impl Action for Add {
-        type State = i32;
-        fn execute(&self, prev: Self::State) -> Self::State {
-            prev + self.0
-        }
-    }
 
     impl Memento for i32 {
         type Target = Self;
@@ -239,61 +225,31 @@ mod test {
         }
     }
 
-    #[derive(Debug)]
-    struct Mul(i32);
-
-    impl Action for Mul {
-        type State = i32;
-        fn execute(&self, prev: Self::State) -> Self::State {
-            prev * self.0
-        }
-    }
-
-    #[derive(Debug)]
-    struct OkAdd(i32);
-
-    impl TryAction for OkAdd {
-        type State = i32;
-        fn try_execute(
-            &self,
-            prev: Self::State,
-        ) -> Result<Self::State, Box<dyn std::error::Error>> {
-            Ok(prev + self.0)
-        }
-    }
-
-    #[derive(Debug)]
-    struct ErrAdd(i32);
-
-    impl TryAction for ErrAdd {
-        type State = i32;
-        fn try_execute(&self, _: Self::State) -> Result<Self::State, Box<dyn std::error::Error>> {
-            "NaN".parse::<i32>().map_err(|e| e.into())
-        }
-    }
-
     #[test]
     fn ok_add() {
         let mut s = GurBuilder::new().build(0);
 
-        let t1 = s.try_act(OkAdd(1)).unwrap();
+        let t1 = s.try_act(|n| Ok(n + 1)).unwrap();
         assert_eq!(1, *t1);
     }
     #[test]
     fn err_add() {
+        let err_add = |n| "NaN".parse::<i32>().map(|p| p + n).map_err(|e| e.into());
+        let add_one = |n| n + 1;
+
         let mut s = GurBuilder::new().build(0);
 
         assert_eq!(0, *s);
 
-        let t1 = s.try_act(ErrAdd(1));
+        let t1 = s.try_act(err_add);
         assert!(t1.is_err());
         assert_eq!(0, *s);
 
-        let t1 = s.act(Add(1));
+        let t1 = s.act(add_one);
         assert_eq!(1, *t1);
-        let t2 = s.act(Add(1));
+        let t2 = s.act(add_one);
         assert_eq!(2, *t2);
-        let t3 = s.try_act(ErrAdd(1));
+        let t3 = s.try_act(err_add);
         assert!(t3.is_err());
         assert_eq!(2, *s);
     }
@@ -301,16 +257,16 @@ mod test {
     fn deref() {
         let mut s = GurBuilder::new().build(0);
 
-        s.act(Add(1));
+        s.act(|n| n + 1);
         assert_eq!(1, *s);
         assert_eq!(s.get(), &*s);
-        s.act(Mul(3));
+        s.act(|n| n * 3);
         assert_eq!(3, *s);
         assert_eq!(s.get(), &*s);
-        s.act(Add(5));
+        s.act(|n| n + 5);
         assert_eq!(8, *s);
         assert_eq!(s.get(), &*s);
-        s.act(Mul(7));
+        s.act(|n| n * 7);
         assert_eq!(56, *s);
         assert_eq!(s.get(), &*s);
     }
@@ -323,13 +279,13 @@ mod test {
         assert_eq!(0, t0);
         assert!(s.undo().is_none());
 
-        let t1 = *s.act(Add(1));
+        let t1 = *s.act(|n| n + 1);
         assert_eq!(1, *s);
-        let t2 = *s.act(Mul(3));
+        let t2 = *s.act(|n| n * 3);
         assert_eq!(3, *s);
-        let t3 = *s.act(Add(5));
+        let t3 = *s.act(|n| n + 5);
         assert_eq!(8, *s);
-        let t4 = *s.act(Mul(7));
+        let t4 = *s.act(|n| n * 7);
         assert_eq!(56, *s);
 
         let u3 = *s.undo().unwrap();
@@ -359,7 +315,7 @@ mod test {
             .build(0);
 
         for i in 0..n {
-            s.act(Add(1));
+            s.act(|n| n + 1);
             assert_eq!(i + 1, *s);
         }
 
@@ -383,13 +339,13 @@ mod test {
         assert!(s.undo().is_none());
         assert!(s.redo().is_none());
 
-        let t1 = *s.act(Add(1));
+        let t1 = *s.act(|n| n + 1);
         assert_eq!(1, *s);
-        let t2 = *s.act(Mul(3));
+        let t2 = *s.act(|n| n * 3);
         assert_eq!(3, *s);
-        let t3 = *s.act(Add(5));
+        let t3 = *s.act(|n| n + 5);
         assert_eq!(8, *s);
-        let t4 = *s.act(Mul(7));
+        let t4 = *s.act(|n| n * 7);
         assert_eq!(56, *s);
 
         let _ = s.undo().unwrap();
@@ -398,13 +354,13 @@ mod test {
         let _ = s.undo().unwrap();
         assert!(s.undo().is_none());
 
-        let r1 = *s.act(Add(1));
+        let r1 = *s.redo().unwrap();
         assert_eq!(1, *s);
-        let r2 = *s.act(Mul(3));
+        let r2 = *s.redo().unwrap();
         assert_eq!(3, *s);
-        let r3 = *s.act(Add(5));
+        let r3 = *s.redo().unwrap();
         assert_eq!(8, *s);
-        let r4 = *s.act(Mul(7));
+        let r4 = *s.redo().unwrap();
         assert_eq!(56, *s);
         assert!(s.redo().is_none());
 
@@ -421,14 +377,14 @@ mod test {
         let t0 = s.get();
         assert_eq!(0, *t0);
 
-        let t1 = s.act(Add(1));
+        let t1 = s.act(|n| n + 1);
         assert_eq!(1, *t1);
-        let t2 = s.act(Mul(3));
+        let t2 = s.act(|n| n * 3);
         assert_eq!(3, *t2);
 
         let u1 = s.undo().unwrap();
         assert_eq!(1, *u1);
-        let t2d = s.act(Add(4));
+        let t2d = s.act(|n| n + 4);
         assert_eq!(5, *t2d);
     }
 
@@ -439,16 +395,16 @@ mod test {
         let t0 = *s.get();
         assert_eq!(0, t0);
 
-        let t1 = s.act(Add(1));
+        let t1 = s.act(|n| n + 1);
         assert_eq!(1, *t1);
-        let t2 = s.act(Mul(3));
+        let t2 = s.act(|n| n * 3);
         assert_eq!(3, *t2);
 
         let u1 = s.undo().unwrap();
         assert_eq!(1, *u1);
-        let t2d = s.act(Add(4));
+        let t2d = s.act(|n| n + 4);
         assert_eq!(5, *t2d);
-        let t3d = s.act(Mul(5));
+        let t3d = s.act(|n| n * 5);
         assert_eq!(25, *t3d);
 
         let u2d = s.undo().unwrap();
