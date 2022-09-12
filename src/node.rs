@@ -1,22 +1,24 @@
 use crate::action::Action;
 use crate::memento::Memento;
+use crate::metrics::Metrics;
+use std::time::Duration;
 
-pub(crate) enum Node<'a, T: Memento> {
+pub(crate) enum Creator<'a, T: Memento> {
     Action(Box<dyn Action<State = T> + 'a>),
-    Memento(Box<T::Target>),
+    Snapshot(Box<T::Target>),
 }
 
-impl<'a, T: Memento> Node<'a, T> {
+impl<'a, T: Memento> Creator<'a, T> {
     pub(crate) fn from_action<A: Action<State = T> + 'a>(action: A) -> Self {
-        Node::Action(Box::new(action))
+        Creator::Action(Box::new(action))
     }
     pub(crate) fn from_memento(state: &T) -> Self {
-        Node::Memento(Box::new(state.to_memento()))
+        Creator::Snapshot(Box::new(state.to_memento()))
     }
 
     pub(crate) fn get_if_memento(&self) -> Option<&T::Target> {
         match self {
-            Self::Memento(m) => Some(m),
+            Self::Snapshot(m) => Some(m),
             _ => None,
         }
     }
@@ -25,5 +27,36 @@ impl<'a, T: Memento> Node<'a, T> {
             Self::Action(a) => Some(&**a),
             _ => None,
         }
+    }
+}
+
+pub(crate) struct Node<'a, T: Memento> {
+    creator: Creator<'a, T>,
+    metrics: Metrics,
+}
+
+impl<'a, T: Memento> Node<'a, T> {
+    pub(crate) fn next_action_node<A: Action<State = T> + 'a>(
+        &self,
+        action: A,
+        act_time: Duration,
+    ) -> Self {
+        Self {
+            creator: Creator::from_action(action),
+            metrics: self.metrics.make_next(act_time),
+        }
+    }
+    pub(crate) fn from_memento(state: &T) -> Self {
+        Self {
+            creator: Creator::from_memento(state),
+            metrics: Metrics::zero(),
+        }
+    }
+
+    pub(crate) fn creator(&self) -> &Creator<'a, T> {
+        &self.creator
+    }
+    pub(crate) fn metrics(&self) -> &Metrics {
+        &self.metrics
     }
 }

@@ -1,7 +1,8 @@
 use crate::action::{Action, TryAction};
 use crate::memento::Memento;
-use crate::node::Node;
+use crate::node::{Creator, Node};
 use std::iter::Iterator;
+use std::time::{Duration, Instant};
 
 pub struct GurBuilder;
 
@@ -83,13 +84,13 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
     fn find_last_snapshot(&self, end: usize) -> (T, usize) {
         if 0 < end {
             for (node, i) in self.actions[1..end].iter().rev().zip(1..) {
-                if let Some(m) = node.get_if_memento() {
+                if let Some(m) = node.creator().get_if_memento() {
                     let s = T::from_memento(m);
                     return (s, end - i);
                 }
             }
         }
-        let m = self.actions[0].get_if_memento();
+        let m = self.actions[0].creator().get_if_memento();
         debug_assert!(m.is_some());
         let s = T::from_memento(unsafe { m.unwrap_unchecked() });
         (s, 0)
@@ -103,7 +104,7 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
             let prev = self.state.take().unwrap();
 
             debug_assert!(i < self.actions.len());
-            let action = self.actions[i].get_if_action().unwrap();
+            let action = self.actions[i].creator().get_if_action().unwrap();
 
             let next = action.execute(prev);
             self.state = Some(next);
@@ -112,9 +113,9 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
 
     fn redo_impl(&mut self) {
         let node = &self.actions[self.current + 1];
-        let new_state = match node {
-            Node::Memento(m) => T::from_memento(m),
-            Node::Action(a) => a.execute(self.state.take().unwrap()),
+        let new_state = match node.creator() {
+            Creator::Snapshot(m) => T::from_memento(m),
+            Creator::Action(a) => a.execute(self.state.take().unwrap()),
         };
         self.state = Some(new_state);
     }
@@ -127,13 +128,23 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
             let prev = self.state.take().unwrap();
 
             debug_assert!(i < self.actions.len());
-            let action = self.actions[i].get_if_action().unwrap();
+            let action = self.actions[i].creator().get_if_action().unwrap();
 
             let next = action.execute(prev);
             self.state = Some(next);
         }
     }
 
+    fn act_impl<A>(action: &A, old_state: T) -> (T, Duration)
+    where
+        A: Action<State = T> + 'a,
+    {
+        let now = Instant::now();
+        let new_state = action.execute(old_state);
+        let elapsed = now.elapsed();
+
+        (new_state, elapsed)
+    }
     pub fn act<A>(&mut self, action: A) -> &T
     where
         A: Action<State = T> + 'a,
@@ -141,10 +152,15 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
         debug_assert!(self.state.is_some());
 
         let old_state = unsafe { self.state.take().unwrap_unchecked() };
-        let new_state = action.execute(old_state);
+
+        let (new_state, elapsed) = Self::act_impl(&action, old_state);
 
         self.actions.truncate(self.current + 1);
-        self.actions.push(Node::from_action(action));
+        let last_node = self.actions.last().unwrap();
+
+        self.actions
+            .push(last_node.next_action_node(action, elapsed));
+
         self.current += 1;
 
         self.state.replace(new_state);

@@ -44,4 +44,5 @@
 pub mod action;
 pub mod gur;
 pub mod memento;
+pub mod metrics;
 mod node;
