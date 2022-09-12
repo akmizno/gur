@@ -1,54 +1,61 @@
 use crate::memento::Memento;
 use crate::metrics::Metrics;
 
-pub(crate) enum Creator<'a, T: Memento> {
-    Action(Box<dyn Fn(T) -> T + 'a>),
+pub(crate) enum Generator<'a, T: Memento> {
+    Editor(Box<dyn Fn(T) -> T + 'a>),
     Snapshot(Box<T::Target>),
 }
 
-impl<'a, T: Memento> Creator<'a, T> {
-    pub(crate) fn from_action<F: Fn(T) -> T + 'a>(action: F) -> Self {
-        Creator::Action(Box::new(action))
+impl<'a, T: Memento> Generator<'a, T> {
+    pub(crate) fn from_editor<F: Fn(T) -> T + 'a>(editor: F) -> Self {
+        Generator::Editor(Box::new(editor))
     }
-    pub(crate) fn from_memento(state: &T) -> Self {
-        Creator::Snapshot(Box::new(state.to_memento()))
+    pub(crate) fn from_state(state: &T) -> Self {
+        Generator::Snapshot(Box::new(state.to_memento()))
     }
 
-    pub(crate) fn get_if_memento(&self) -> Option<&T::Target> {
+    pub(crate) fn generate_if_snapshot(&self) -> Option<T> {
         match self {
-            Self::Snapshot(m) => Some(m),
+            Self::Snapshot(m) => Some(T::from_memento(m)),
             _ => None,
         }
     }
-    pub(crate) fn get_if_action(&self) -> Option<&(dyn Fn(T) -> T + 'a)> {
+    pub(crate) fn generate_if_editor(&self, prev: T) -> Option<T> {
         match self {
-            Self::Action(a) => Some(&**a),
+            Self::Editor(ed) => Some(ed(prev)),
             _ => None,
+        }
+    }
+
+    pub(crate) fn generate(&self, prev: T) -> T {
+        match self {
+            Self::Editor(ed) => ed(prev),
+            Self::Snapshot(m) => T::from_memento(m),
         }
     }
 }
 
 pub(crate) struct Node<'a, T: Memento> {
-    creator: Creator<'a, T>,
+    generator: Generator<'a, T>,
     metrics: Metrics,
 }
 
 impl<'a, T: Memento> Node<'a, T> {
-    pub(crate) fn from_action<F: Fn(T) -> T + 'a>(action: F, metrics: Metrics) -> Self {
+    pub(crate) fn from_editor<F: Fn(T) -> T + 'a>(action: F, metrics: Metrics) -> Self {
         Self {
-            creator: Creator::from_action(action),
+            generator: Generator::from_editor(action),
             metrics: metrics,
         }
     }
-    pub(crate) fn from_memento(state: &T) -> Self {
+    pub(crate) fn from_state(state: &T) -> Self {
         Self {
-            creator: Creator::from_memento(state),
+            generator: Generator::from_state(state),
             metrics: Metrics::zero(),
         }
     }
 
-    pub(crate) fn creator(&self) -> &Creator<'a, T> {
-        &self.creator
+    pub(crate) fn generator(&self) -> &Generator<'a, T> {
+        &self.generator
     }
     pub(crate) fn metrics(&self) -> &Metrics {
         &self.metrics

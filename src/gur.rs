@@ -1,6 +1,6 @@
 use crate::memento::Memento;
 use crate::metrics::Metrics;
-use crate::node::{Creator, Node};
+use crate::node::Node;
 use std::iter::Iterator;
 use std::time::{Duration, Instant};
 
@@ -37,7 +37,7 @@ impl<'a> Default for GurBuilder<'a> {
 pub struct Gur<'a, T: Memento> {
     state: Option<T>,
 
-    actions: Vec<Node<'a, T>>,
+    history: Vec<Node<'a, T>>,
     current: usize,
 
     snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
@@ -63,10 +63,10 @@ impl<'a, T: Memento> std::ops::Deref for Gur<'a, T> {
 
 impl<'a, T: Memento + 'a> Gur<'a, T> {
     fn new(initial_state: T, snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>) -> Self {
-        let first_node = Node::from_memento(&initial_state);
+        let first_node = Node::from_state(&initial_state);
         Self {
             state: Some(initial_state),
-            actions: vec![first_node],
+            history: vec![first_node],
             current: 0,
             snapshot_trigger,
         }
@@ -76,7 +76,7 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
         unsafe { self.state.as_ref().unwrap_unchecked() }
     }
     pub fn undo(&mut self) -> Option<&T> {
-        debug_assert!(self.current < self.actions.len());
+        debug_assert!(self.current < self.history.len());
         if self.current == 0 {
             None
         } else {
@@ -86,8 +86,8 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
         }
     }
     pub fn redo(&mut self) -> Option<&T> {
-        debug_assert!(self.current < self.actions.len());
-        if self.current + 1 == self.actions.len() {
+        debug_assert!(self.current < self.history.len());
+        if self.current + 1 == self.history.len() {
             None
         } else {
             self.redo_impl();
@@ -98,16 +98,13 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
 
     fn find_last_snapshot(&self, end: usize) -> (T, usize) {
         if 0 < end {
-            for (node, i) in self.actions[1..end].iter().rev().zip(1..) {
-                if let Some(m) = node.creator().get_if_memento() {
-                    let s = T::from_memento(m);
+            for (node, i) in self.history[1..end].iter().rev().zip(1..) {
+                if let Some(s) = node.generator().generate_if_snapshot() {
                     return (s, end - i);
                 }
             }
         }
-        let m = self.actions[0].creator().get_if_memento();
-        debug_assert!(m.is_some());
-        let s = T::from_memento(unsafe { m.unwrap_unchecked() });
+        let s = self.history[0].generator().generate_if_snapshot().unwrap();
         (s, 0)
     }
 
@@ -118,20 +115,18 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
         for i in first_idx + 1..self.current {
             let prev = self.state.take().unwrap();
 
-            debug_assert!(i < self.actions.len());
-            let action = self.actions[i].creator().get_if_action().unwrap();
-
-            let next = action(prev);
+            debug_assert!(i < self.history.len());
+            let next = self.history[i]
+                .generator()
+                .generate_if_editor(prev)
+                .unwrap();
             self.state = Some(next);
         }
     }
 
     fn redo_impl(&mut self) {
-        let node = &self.actions[self.current + 1];
-        let new_state = match node.creator() {
-            Creator::Snapshot(m) => T::from_memento(m),
-            Creator::Action(a) => a(self.state.take().unwrap()),
-        };
+        let node = &self.history[self.current + 1];
+        let new_state = node.generator().generate(self.state.take().unwrap());
         self.state = Some(new_state);
     }
 
@@ -142,25 +137,26 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
         for i in first_idx + 1..self.current + 1 {
             let prev = self.state.take().unwrap();
 
-            debug_assert!(i < self.actions.len());
-            let action = self.actions[i].creator().get_if_action().unwrap();
-
-            let next = action(prev);
+            debug_assert!(i < self.history.len());
+            let next = self.history[i]
+                .generator()
+                .generate_if_editor(prev)
+                .unwrap();
             self.state = Some(next);
         }
     }
 
-    fn act_impl<F>(action: &F, old_state: T) -> (T, Duration)
+    fn edit_impl<F>(editor: &F, old_state: T) -> (T, Duration)
     where
         F: Fn(T) -> T + 'a,
     {
         let now = Instant::now();
-        let new_state = action(old_state);
+        let new_state = editor(old_state);
         let elapsed = now.elapsed();
 
         (new_state, elapsed)
     }
-    pub fn act<F>(&mut self, action: F) -> &T
+    pub fn edit<F>(&mut self, editor: F) -> &T
     where
         F: Fn(T) -> T + 'a,
     {
@@ -168,17 +164,17 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
 
         let old_state = unsafe { self.state.take().unwrap_unchecked() };
 
-        let (new_state, elapsed) = Self::act_impl(&action, old_state);
+        let (new_state, elapsed) = Self::edit_impl(&editor, old_state);
 
-        self.actions.truncate(self.current + 1);
+        self.history.truncate(self.current + 1);
 
-        let last_metrics = self.actions.last().unwrap().metrics();
-        let action_metrics = last_metrics.make_next(elapsed);
+        let last_metrics = self.history.last().unwrap().metrics();
+        let new_metrics = last_metrics.make_next(elapsed);
 
-        if (self.snapshot_trigger)(&action_metrics) {
-            self.actions.push(Node::from_memento(&new_state));
+        if (self.snapshot_trigger)(&new_metrics) {
+            self.history.push(Node::from_state(&new_state));
         } else {
-            self.actions.push(Node::from_action(action, action_metrics));
+            self.history.push(Node::from_editor(editor, new_metrics));
         }
 
         self.current += 1;
@@ -187,17 +183,17 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
         self.get()
     }
 
-    pub fn try_act<F>(&mut self, action: F) -> Result<&T, Box<dyn std::error::Error>>
+    pub fn try_edit<F>(&mut self, editor: F) -> Result<&T, Box<dyn std::error::Error>>
     where
         F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,
     {
         debug_assert!(self.state.is_some());
 
         let old_state = unsafe { self.state.take().unwrap_unchecked() };
-        match action(old_state) {
+        match editor(old_state) {
             Ok(new_state) => {
-                self.actions.truncate(self.current + 1);
-                self.actions.push(Node::from_memento(&new_state));
+                self.history.truncate(self.current + 1);
+                self.history.push(Node::from_state(&new_state));
                 self.current += 1;
 
                 self.state.replace(new_state);
@@ -229,7 +225,7 @@ mod test {
     fn ok_add() {
         let mut s = GurBuilder::new().build(0);
 
-        let t1 = s.try_act(|n| Ok(n + 1)).unwrap();
+        let t1 = s.try_edit(|n| Ok(n + 1)).unwrap();
         assert_eq!(1, *t1);
     }
     #[test]
@@ -241,15 +237,15 @@ mod test {
 
         assert_eq!(0, *s);
 
-        let t1 = s.try_act(err_add);
+        let t1 = s.try_edit(err_add);
         assert!(t1.is_err());
         assert_eq!(0, *s);
 
-        let t1 = s.act(add_one);
+        let t1 = s.edit(add_one);
         assert_eq!(1, *t1);
-        let t2 = s.act(add_one);
+        let t2 = s.edit(add_one);
         assert_eq!(2, *t2);
-        let t3 = s.try_act(err_add);
+        let t3 = s.try_edit(err_add);
         assert!(t3.is_err());
         assert_eq!(2, *s);
     }
@@ -257,16 +253,16 @@ mod test {
     fn deref() {
         let mut s = GurBuilder::new().build(0);
 
-        s.act(|n| n + 1);
+        s.edit(|n| n + 1);
         assert_eq!(1, *s);
         assert_eq!(s.get(), &*s);
-        s.act(|n| n * 3);
+        s.edit(|n| n * 3);
         assert_eq!(3, *s);
         assert_eq!(s.get(), &*s);
-        s.act(|n| n + 5);
+        s.edit(|n| n + 5);
         assert_eq!(8, *s);
         assert_eq!(s.get(), &*s);
-        s.act(|n| n * 7);
+        s.edit(|n| n * 7);
         assert_eq!(56, *s);
         assert_eq!(s.get(), &*s);
     }
@@ -279,13 +275,13 @@ mod test {
         assert_eq!(0, t0);
         assert!(s.undo().is_none());
 
-        let t1 = *s.act(|n| n + 1);
+        let t1 = *s.edit(|n| n + 1);
         assert_eq!(1, *s);
-        let t2 = *s.act(|n| n * 3);
+        let t2 = *s.edit(|n| n * 3);
         assert_eq!(3, *s);
-        let t3 = *s.act(|n| n + 5);
+        let t3 = *s.edit(|n| n + 5);
         assert_eq!(8, *s);
-        let t4 = *s.act(|n| n * 7);
+        let t4 = *s.edit(|n| n * 7);
         assert_eq!(56, *s);
 
         let u3 = *s.undo().unwrap();
@@ -315,7 +311,7 @@ mod test {
             .build(0);
 
         for i in 0..n {
-            s.act(|n| n + 1);
+            s.edit(|n| n + 1);
             assert_eq!(i + 1, *s);
         }
 
@@ -339,13 +335,13 @@ mod test {
         assert!(s.undo().is_none());
         assert!(s.redo().is_none());
 
-        let t1 = *s.act(|n| n + 1);
+        let t1 = *s.edit(|n| n + 1);
         assert_eq!(1, *s);
-        let t2 = *s.act(|n| n * 3);
+        let t2 = *s.edit(|n| n * 3);
         assert_eq!(3, *s);
-        let t3 = *s.act(|n| n + 5);
+        let t3 = *s.edit(|n| n + 5);
         assert_eq!(8, *s);
-        let t4 = *s.act(|n| n * 7);
+        let t4 = *s.edit(|n| n * 7);
         assert_eq!(56, *s);
 
         let _ = s.undo().unwrap();
@@ -371,40 +367,40 @@ mod test {
     }
 
     #[test]
-    fn act_undo_act() {
+    fn edit_undo_edit() {
         let mut s = GurBuilder::new().build(0);
 
         let t0 = s.get();
         assert_eq!(0, *t0);
 
-        let t1 = s.act(|n| n + 1);
+        let t1 = s.edit(|n| n + 1);
         assert_eq!(1, *t1);
-        let t2 = s.act(|n| n * 3);
+        let t2 = s.edit(|n| n * 3);
         assert_eq!(3, *t2);
 
         let u1 = s.undo().unwrap();
         assert_eq!(1, *u1);
-        let t2d = s.act(|n| n + 4);
+        let t2d = s.edit(|n| n + 4);
         assert_eq!(5, *t2d);
     }
 
     #[test]
-    fn act_undo_act_act_undo_redo() {
+    fn edit_undo_edit_edit_undo_redo() {
         let mut s = GurBuilder::new().build(0);
 
         let t0 = *s.get();
         assert_eq!(0, t0);
 
-        let t1 = s.act(|n| n + 1);
+        let t1 = s.edit(|n| n + 1);
         assert_eq!(1, *t1);
-        let t2 = s.act(|n| n * 3);
+        let t2 = s.edit(|n| n * 3);
         assert_eq!(3, *t2);
 
         let u1 = s.undo().unwrap();
         assert_eq!(1, *u1);
-        let t2d = s.act(|n| n + 4);
+        let t2d = s.edit(|n| n + 4);
         assert_eq!(5, *t2d);
-        let t3d = s.act(|n| n * 5);
+        let t3d = s.edit(|n| n * 5);
         assert_eq!(25, *t3d);
 
         let u2d = s.undo().unwrap();

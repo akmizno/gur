@@ -20,7 +20,7 @@
 //! fn main() {
 //!     let mut gur = GurBuilder::new().build(MyState(0));
 //!
-//!     gur.act(|state| MyState(state.0 + 1));
+//!     gur.edit(|state| MyState(state.0 + 1));
 //!     assert_eq!(1, gur.0);
 //!
 //!     gur.undo().unwrap();
