@@ -5,7 +5,7 @@ use std::iter::Iterator;
 use std::time::{Duration, Instant};
 
 pub struct GurBuilder<'a> {
-    snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
+    snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
 }
 
 impl<'a> GurBuilder<'a> {
@@ -17,7 +17,7 @@ impl<'a> GurBuilder<'a> {
 
     pub fn snapshot_trigger<F>(mut self, f: F) -> Self
     where
-        F: FnMut(&Metrics) -> bool + 'a,
+        F: FnMut(&Metrics) -> bool + Send + Sync + 'a,
     {
         self.snapshot_trigger = Box::new(f);
         self
@@ -40,7 +40,7 @@ pub struct Gur<'a, T: Memento> {
     history: Vec<Node<'a, T>>,
     current: usize,
 
-    snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
+    snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
 }
 
 impl<'a, T: Default + Memento + 'a> Default for Gur<'a, T> {
@@ -62,7 +62,10 @@ impl<'a, T: Memento> std::ops::Deref for Gur<'a, T> {
 }
 
 impl<'a, T: Memento + 'a> Gur<'a, T> {
-    fn new(initial_state: T, snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>) -> Self {
+    fn new(
+        initial_state: T,
+        snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
+    ) -> Self {
         let first_node = Node::from_state(&initial_state);
         Self {
             state: Some(initial_state),
@@ -158,7 +161,7 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
     }
     pub fn edit<F>(&mut self, editor: F) -> &T
     where
-        F: Fn(T) -> T + 'a,
+        F: Fn(T) -> T + Send + Sync + 'a,
     {
         debug_assert!(self.state.is_some());
 

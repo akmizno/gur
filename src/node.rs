@@ -2,12 +2,15 @@ use crate::memento::Memento;
 use crate::metrics::Metrics;
 
 pub(crate) enum Generator<'a, T: Memento> {
-    Editor(Box<dyn Fn(T) -> T + 'a>),
+    Editor(Box<dyn Fn(T) -> T + Send + Sync + 'a>),
     Snapshot(Box<T::Target>),
 }
 
 impl<'a, T: Memento> Generator<'a, T> {
-    pub(crate) fn from_editor<F: Fn(T) -> T + 'a>(editor: F) -> Self {
+    pub(crate) fn from_editor<F>(editor: F) -> Self
+    where
+        F: Fn(T) -> T + Send + Sync + 'a,
+    {
         Generator::Editor(Box::new(editor))
     }
     pub(crate) fn from_state(state: &T) -> Self {
@@ -41,7 +44,10 @@ pub(crate) struct Node<'a, T: Memento> {
 }
 
 impl<'a, T: Memento> Node<'a, T> {
-    pub(crate) fn from_editor<F: Fn(T) -> T + 'a>(action: F, metrics: Metrics) -> Self {
+    pub(crate) fn from_editor<F>(action: F, metrics: Metrics) -> Self
+    where
+        F: Fn(T) -> T + Send + Sync + 'a,
+    {
         Self {
             generator: Generator::from_editor(action),
             metrics: metrics,
