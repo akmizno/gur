@@ -2,18 +2,18 @@
 //!
 //! ```rust
 //! use gur::gur::{GurBuilder, Gur};
-//! use gur::memento::Memento;
+//! use gur::snapshot::Snapshot;
 //!
 //! #[derive(Clone)]
 //! struct MyState(i32);
 //!
-//! impl Memento for MyState {
+//! impl Snapshot for MyState {
 //!     type Target = MyState;
-//!     fn to_memento(&self) -> Self::Target {
+//!     fn to_snapshot(&self) -> Self::Target {
 //!         self.clone()
 //!     }
-//!     fn from_memento(m: &Self::Target) -> Self {
-//!         m.clone()
+//!     fn from_snapshot(s: &Self::Target) -> Self {
+//!         s.clone()
 //!     }
 //! }
 //!
@@ -31,6 +31,6 @@
 //! }
 //! ```
 pub mod gur;
-pub mod memento;
 pub mod metrics;
 mod node;
+pub mod snapshot;

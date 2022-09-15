@@ -1,6 +1,6 @@
-use crate::memento::Memento;
 use crate::metrics::Metrics;
 use crate::node::Node;
+use crate::snapshot::Snapshot;
 use std::iter::Iterator;
 use std::time::{Duration, Instant};
 
@@ -23,7 +23,7 @@ impl<'a> GurBuilder<'a> {
         self
     }
 
-    pub fn build<T: Memento + 'a>(self, initial_state: T) -> Gur<'a, T> {
+    pub fn build<T: Snapshot + 'a>(self, initial_state: T) -> Gur<'a, T> {
         Gur::new(initial_state, self.snapshot_trigger)
     }
 }
@@ -34,7 +34,7 @@ impl<'a> Default for GurBuilder<'a> {
     }
 }
 
-pub struct Gur<'a, T: Memento> {
+pub struct Gur<'a, T: Snapshot> {
     state: Option<T>,
 
     history: Vec<Node<'a, T>>,
@@ -43,25 +43,25 @@ pub struct Gur<'a, T: Memento> {
     snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
 }
 
-impl<'a, T: Default + Memento + 'a> Default for Gur<'a, T> {
+impl<'a, T: Default + Snapshot + 'a> Default for Gur<'a, T> {
     fn default() -> Self {
         GurBuilder::new().build(T::default())
     }
 }
-impl<'a, T: std::fmt::Display + Memento> std::fmt::Display for Gur<'a, T> {
+impl<'a, T: std::fmt::Display + Snapshot> std::fmt::Display for Gur<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.get().fmt(f)
     }
 }
 
-impl<'a, T: Memento> std::ops::Deref for Gur<'a, T> {
+impl<'a, T: Snapshot> std::ops::Deref for Gur<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.get()
     }
 }
 
-impl<'a, T: Memento + 'a> Gur<'a, T> {
+impl<'a, T: Snapshot + 'a> Gur<'a, T> {
     fn new(
         initial_state: T,
         snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
@@ -212,15 +212,15 @@ impl<'a, T: Memento + 'a> Gur<'a, T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::memento::Memento;
+    use crate::snapshot::Snapshot;
 
-    impl Memento for i32 {
+    impl Snapshot for i32 {
         type Target = Self;
-        fn to_memento(&self) -> Self::Target {
+        fn to_snapshot(&self) -> Self::Target {
             *self
         }
-        fn from_memento(memento: &Self::Target) -> Self {
-            *memento
+        fn from_snapshot(snapshot: &Self::Target) -> Self {
+            *snapshot
         }
     }
 
@@ -309,7 +309,7 @@ mod test {
         let n = 100000;
 
         let mut s = GurBuilder::new()
-            // To speed up undo()/redo(), a memento is sometimes created.
+            // To speed up undo()/redo(), a snapshot is sometimes created.
             .snapshot_trigger(|metrics| 10 < metrics.distance_from_snapshot())
             .build(0);
 

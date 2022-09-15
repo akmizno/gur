@@ -1,28 +1,28 @@
 /// Store and restore object's state.
 ///
-/// [`Gur<T>`](crate::gur::Gur) requires T implementing [`Memento`] to take a snapshot of its internal state.
+/// [`Gur<T>`](crate::gur::Gur) requires T implementing [`Snapshot`] to take a snapshot from its internal state.
 ///
 /// A simplest way to implement this trait is by cloning itself.
 /// ```
-/// # use gur::memento::Memento;
+/// # use gur::snapshot::Snapshot;
 ///
 /// #[derive(Clone)]
 /// struct MyState(String);
 ///
-/// impl Memento for MyState {
+/// impl Snapshot for MyState {
 ///     type Target = Self;
-///     fn to_memento(&self) -> Self::Target {
+///     fn to_snapshot(&self) -> Self::Target {
 ///         self.clone()
 ///     }
-///     fn from_memento(memento: &Self::Target) -> Self {
-///         memento.clone()
+///     fn from_snapshot(snapshot: &Self::Target) -> Self {
+///         snapshot.clone()
 ///     }
 /// }
 /// ```
-pub trait Memento {
+pub trait Snapshot {
     type Target;
-    fn to_memento(&self) -> Self::Target;
-    fn from_memento(memento: &Self::Target) -> Self;
+    fn to_snapshot(&self) -> Self::Target;
+    fn from_snapshot(snapshot: &Self::Target) -> Self;
 }
 
 #[cfg(test)]
@@ -32,13 +32,13 @@ mod test {
     #[derive(Clone, PartialEq, Debug)]
     struct StringState(String);
 
-    impl Memento for StringState {
+    impl Snapshot for StringState {
         type Target = Self;
-        fn to_memento(&self) -> Self::Target {
+        fn to_snapshot(&self) -> Self::Target {
             self.clone()
         }
-        fn from_memento(memento: &Self::Target) -> Self {
-            memento.clone()
+        fn from_snapshot(snapshot: &Self::Target) -> Self {
+            snapshot.clone()
         }
     }
 
@@ -46,9 +46,9 @@ mod test {
     fn string_as_string() {
         let state = StringState("Hello".to_string());
 
-        let memento = state.to_memento();
+        let snapshot = state.to_snapshot();
 
-        let restored = StringState::from_memento(&memento);
+        let restored = StringState::from_snapshot(&snapshot);
 
         assert_eq!(state, restored);
     }
@@ -58,13 +58,13 @@ mod test {
     #[derive(PartialEq, Debug)]
     struct MapState(HashMap<String, u32>);
 
-    impl Memento for MapState {
+    impl Snapshot for MapState {
         type Target = Vec<(String, u32)>;
-        fn to_memento(&self) -> Self::Target {
+        fn to_snapshot(&self) -> Self::Target {
             self.0.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
         }
-        fn from_memento(memento: &Self::Target) -> Self {
-            Self(memento.iter().map(|kv| kv.clone()).collect())
+        fn from_snapshot(snapshot: &Self::Target) -> Self {
+            Self(snapshot.iter().map(|kv| kv.clone()).collect())
         }
     }
 
@@ -77,9 +77,9 @@ mod test {
 
         let state = MapState(map);
 
-        let memento = state.to_memento();
+        let snapshot = state.to_snapshot();
 
-        let restored = MapState::from_memento(&memento);
+        let restored = MapState::from_snapshot(&snapshot);
 
         assert_eq!(state, restored);
     }
