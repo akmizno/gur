@@ -1,6 +1,5 @@
 use crate::metrics::Metrics;
 use crate::node::Node;
-use crate::snapshot::Snapshot;
 use std::iter::Iterator;
 use std::time::{Duration, Instant};
 
@@ -23,7 +22,7 @@ impl<'a> GurBuilder<'a> {
         self
     }
 
-    pub fn build<T: Snapshot + 'a>(self, initial_state: T) -> Gur<'a, T> {
+    pub fn build<T: Clone + 'a>(self, initial_state: T) -> Gur<'a, T> {
         Gur::new(initial_state, self.snapshot_trigger)
     }
 }
@@ -34,7 +33,7 @@ impl<'a> Default for GurBuilder<'a> {
     }
 }
 
-pub struct Gur<'a, T: Snapshot> {
+pub struct Gur<'a, T> {
     state: Option<T>,
 
     history: Vec<Node<'a, T>>,
@@ -43,25 +42,31 @@ pub struct Gur<'a, T: Snapshot> {
     snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
 }
 
-impl<'a, T: Default + Snapshot + 'a> Default for Gur<'a, T> {
+impl<'a, T: Default + Clone + 'a> Default for Gur<'a, T> {
     fn default() -> Self {
         GurBuilder::new().build(T::default())
     }
 }
-impl<'a, T: std::fmt::Display + Snapshot> std::fmt::Display for Gur<'a, T> {
+impl<'a, T: std::fmt::Display> std::fmt::Display for Gur<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.get().fmt(f)
     }
 }
 
-impl<'a, T: Snapshot> std::ops::Deref for Gur<'a, T> {
+impl<'a, T> std::ops::Deref for Gur<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.get()
     }
 }
 
-impl<'a, T: Snapshot + 'a> Gur<'a, T> {
+impl<'a, T: 'a> Gur<'a, T> {
+    pub fn get(&self) -> &T {
+        debug_assert!(self.state.is_some());
+        unsafe { self.state.as_ref().unwrap_unchecked() }
+    }
+}
+impl<'a, T: Clone + 'a> Gur<'a, T> {
     fn new(
         initial_state: T,
         snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
@@ -73,10 +78,6 @@ impl<'a, T: Snapshot + 'a> Gur<'a, T> {
             current: 0,
             snapshot_trigger,
         }
-    }
-    pub fn get(&self) -> &T {
-        debug_assert!(self.state.is_some());
-        unsafe { self.state.as_ref().unwrap_unchecked() }
     }
     pub fn undo(&mut self) -> Option<&T> {
         debug_assert!(self.current < self.history.len());
@@ -212,17 +213,6 @@ impl<'a, T: Snapshot + 'a> Gur<'a, T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::snapshot::Snapshot;
-
-    impl Snapshot for i32 {
-        type Target = Self;
-        fn to_snapshot(&self) -> Self::Target {
-            *self
-        }
-        fn from_snapshot(snapshot: &Self::Target) -> Self {
-            *snapshot
-        }
-    }
 
     #[test]
     fn ok_add() {
