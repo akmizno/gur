@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+#[derive(Clone, Debug)]
 pub struct Metrics {
     elapsed: Duration,
     elapsed_from_snapshot: Duration,
