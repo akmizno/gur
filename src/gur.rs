@@ -121,7 +121,7 @@ impl<'a, T: Snapshot + 'a> Gur<'a, T> {
             debug_assert!(i < self.history.len());
             let next = self.history[i]
                 .generator()
-                .generate_if_editor(prev)
+                .generate_if_command(prev)
                 .unwrap();
             self.state = Some(next);
         }
@@ -143,23 +143,23 @@ impl<'a, T: Snapshot + 'a> Gur<'a, T> {
             debug_assert!(i < self.history.len());
             let next = self.history[i]
                 .generator()
-                .generate_if_editor(prev)
+                .generate_if_command(prev)
                 .unwrap();
             self.state = Some(next);
         }
     }
 
-    fn edit_impl<F>(editor: &F, old_state: T) -> (T, Duration)
+    fn edit_impl<F>(command: &F, old_state: T) -> (T, Duration)
     where
         F: Fn(T) -> T + 'a,
     {
         let now = Instant::now();
-        let new_state = editor(old_state);
+        let new_state = command(old_state);
         let elapsed = now.elapsed();
 
         (new_state, elapsed)
     }
-    pub fn edit<F>(&mut self, editor: F) -> &T
+    pub fn edit<F>(&mut self, command: F) -> &T
     where
         F: Fn(T) -> T + Send + Sync + 'a,
     {
@@ -167,7 +167,7 @@ impl<'a, T: Snapshot + 'a> Gur<'a, T> {
 
         let old_state = unsafe { self.state.take().unwrap_unchecked() };
 
-        let (new_state, elapsed) = Self::edit_impl(&editor, old_state);
+        let (new_state, elapsed) = Self::edit_impl(&command, old_state);
 
         self.history.truncate(self.current + 1);
 
@@ -177,7 +177,7 @@ impl<'a, T: Snapshot + 'a> Gur<'a, T> {
         if (self.snapshot_trigger)(&new_metrics) {
             self.history.push(Node::from_state(&new_state));
         } else {
-            self.history.push(Node::from_editor(editor, new_metrics));
+            self.history.push(Node::from_command(command, new_metrics));
         }
 
         self.current += 1;
@@ -186,14 +186,14 @@ impl<'a, T: Snapshot + 'a> Gur<'a, T> {
         self.get()
     }
 
-    pub fn try_edit<F>(&mut self, editor: F) -> Result<&T, Box<dyn std::error::Error>>
+    pub fn try_edit<F>(&mut self, command: F) -> Result<&T, Box<dyn std::error::Error>>
     where
         F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,
     {
         debug_assert!(self.state.is_some());
 
         let old_state = unsafe { self.state.take().unwrap_unchecked() };
-        match editor(old_state) {
+        match command(old_state) {
             Ok(new_state) => {
                 self.history.truncate(self.current + 1);
                 self.history.push(Node::from_state(&new_state));
