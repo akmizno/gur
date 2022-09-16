@@ -1,14 +1,14 @@
 use crate::metrics::Metrics;
 
 pub(crate) enum Generator<'a, T> {
-    Command(Box<dyn Fn(T) -> T + Send + Sync + 'a>),
+    Command(Box<dyn Fn(T) -> T + 'a>),
     Snapshot(Box<T>),
 }
 
 impl<'a, T: Clone> Generator<'a, T> {
     pub(crate) fn from_command<F>(command: F) -> Self
     where
-        F: Fn(T) -> T + Send + Sync + 'a,
+        F: Fn(T) -> T + 'a,
     {
         Generator::Command(Box::new(command))
     }
@@ -45,7 +45,7 @@ pub(crate) struct Node<'a, T> {
 impl<'a, T: Clone> Node<'a, T> {
     pub(crate) fn from_command<F>(command: F, metrics: Metrics) -> Self
     where
-        F: Fn(T) -> T + Send + Sync + 'a,
+        F: Fn(T) -> T + 'a,
     {
         Self {
             generator: Generator::from_command(command),

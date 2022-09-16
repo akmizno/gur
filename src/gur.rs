@@ -4,7 +4,7 @@ use std::iter::Iterator;
 use std::time::{Duration, Instant};
 
 pub struct GurBuilder<'a> {
-    snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
+    snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
 }
 
 impl<'a> GurBuilder<'a> {
@@ -16,7 +16,7 @@ impl<'a> GurBuilder<'a> {
 
     pub fn snapshot_trigger<F>(mut self, f: F) -> Self
     where
-        F: FnMut(&Metrics) -> bool + Send + Sync + 'a,
+        F: FnMut(&Metrics) -> bool + 'a,
     {
         self.snapshot_trigger = Box::new(f);
         self
@@ -39,7 +39,7 @@ pub struct Gur<'a, T> {
     history: Vec<Node<'a, T>>,
     current: usize,
 
-    snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
+    snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
 }
 
 impl<'a, T: Default + Clone + 'a> Default for Gur<'a, T> {
@@ -67,10 +67,7 @@ impl<'a, T: 'a> Gur<'a, T> {
     }
 }
 impl<'a, T: Clone + 'a> Gur<'a, T> {
-    fn new(
-        initial_state: T,
-        snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
-    ) -> Self {
+    fn new(initial_state: T, snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>) -> Self {
         let first_node = Node::from_state(&initial_state);
         Self {
             state: Some(initial_state),
@@ -162,7 +159,7 @@ impl<'a, T: Clone + 'a> Gur<'a, T> {
     }
     pub fn edit<F>(&mut self, command: F) -> &T
     where
-        F: Fn(T) -> T + Send + Sync + 'a,
+        F: Fn(T) -> T + 'a,
     {
         debug_assert!(self.state.is_some());
 
@@ -210,6 +207,69 @@ impl<'a, T: Clone + 'a> Gur<'a, T> {
         }
     }
 }
+
+pub struct AurBuilder<'a> {
+    snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
+}
+
+impl<'a> AurBuilder<'a> {
+    pub fn new() -> Self {
+        Self {
+            snapshot_trigger: Box::new(|_m| false),
+        }
+    }
+
+    pub fn snapshot_trigger<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(&Metrics) -> bool + Send + Sync + 'a,
+    {
+        self.snapshot_trigger = Box::new(f);
+        self
+    }
+
+    pub fn build<T: Clone + 'a>(self, initial_state: T) -> Aur<'a, T> {
+        Aur::new(initial_state, self.snapshot_trigger)
+    }
+}
+
+/// Ur<T> + Send + Sync
+pub struct Aur<'a, T>(Gur<'a, T>);
+
+impl<'a, T: Clone + 'a> Aur<'a, T> {
+    fn new(
+        initial_state: T,
+        snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
+    ) -> Self {
+        Self(Gur::new(initial_state, snapshot_trigger))
+    }
+    pub fn undo(&mut self) -> Option<&T> {
+        self.0.undo()
+    }
+    pub fn redo(&mut self) -> Option<&T> {
+        self.0.redo()
+    }
+
+    pub fn edit<F>(&mut self, command: F) -> &T
+    where
+        F: Fn(T) -> T + Send + Sync + 'a,
+    {
+        self.0.edit(command)
+    }
+
+    pub fn try_edit<F>(&mut self, command: F) -> Result<&T, Box<dyn std::error::Error>>
+    where
+        F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,
+    {
+        self.0.try_edit(command)
+    }
+}
+
+// NOTE
+// Implementing the Send and Sync for Aur<T> is safe,
+// since Aur<T> guarantees that all of internally stored functions implement the traits.
+unsafe impl<'a, T: Send> Send for Aur<'a, T> {}
+unsafe impl<'a, T: Sync> Sync for Aur<'a, T> {}
+
 #[cfg(test)]
 mod test {
     use super::*;
