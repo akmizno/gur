@@ -3,11 +3,11 @@ use crate::node::Node;
 use std::iter::Iterator;
 use std::time::{Duration, Instant};
 
-pub struct GurBuilder<'a> {
+pub struct UrBuilder<'a> {
     snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
 }
 
-impl<'a> GurBuilder<'a> {
+impl<'a> UrBuilder<'a> {
     pub fn new() -> Self {
         Self {
             snapshot_trigger: Box::new(|_m| false),
@@ -22,18 +22,18 @@ impl<'a> GurBuilder<'a> {
         self
     }
 
-    pub fn build<T: Clone + 'a>(self, initial_state: T) -> Gur<'a, T> {
-        Gur::new(initial_state, self.snapshot_trigger)
+    pub fn build<T: Clone + 'a>(self, initial_state: T) -> Ur<'a, T> {
+        Ur::new(initial_state, self.snapshot_trigger)
     }
 }
 
-impl<'a> Default for GurBuilder<'a> {
+impl<'a> Default for UrBuilder<'a> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-pub struct Gur<'a, T> {
+pub struct Ur<'a, T> {
     state: Option<T>,
 
     history: Vec<Node<'a, T>>,
@@ -42,31 +42,31 @@ pub struct Gur<'a, T> {
     snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
 }
 
-impl<'a, T: Default + Clone + 'a> Default for Gur<'a, T> {
+impl<'a, T: Default + Clone + 'a> Default for Ur<'a, T> {
     fn default() -> Self {
-        GurBuilder::new().build(T::default())
+        UrBuilder::new().build(T::default())
     }
 }
-impl<'a, T: std::fmt::Display> std::fmt::Display for Gur<'a, T> {
+impl<'a, T: std::fmt::Display> std::fmt::Display for Ur<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.get().fmt(f)
     }
 }
 
-impl<'a, T> std::ops::Deref for Gur<'a, T> {
+impl<'a, T> std::ops::Deref for Ur<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.get()
     }
 }
 
-impl<'a, T: 'a> Gur<'a, T> {
+impl<'a, T: 'a> Ur<'a, T> {
     pub fn get(&self) -> &T {
         debug_assert!(self.state.is_some());
         unsafe { self.state.as_ref().unwrap_unchecked() }
     }
 }
-impl<'a, T: Clone + 'a> Gur<'a, T> {
+impl<'a, T: Clone + 'a> Ur<'a, T> {
     fn new(initial_state: T, snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>) -> Self {
         let first_node = Node::from_state(&initial_state);
         Self {
@@ -233,14 +233,14 @@ impl<'a> AurBuilder<'a> {
 }
 
 /// Ur<T> + Send + Sync
-pub struct Aur<'a, T>(Gur<'a, T>);
+pub struct Aur<'a, T>(Ur<'a, T>);
 
 impl<'a, T: Clone + 'a> Aur<'a, T> {
     fn new(
         initial_state: T,
         snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
     ) -> Self {
-        Self(Gur::new(initial_state, snapshot_trigger))
+        Self(Ur::new(initial_state, snapshot_trigger))
     }
     pub fn undo(&mut self) -> Option<&T> {
         self.0.undo()
@@ -276,7 +276,7 @@ mod test {
 
     #[test]
     fn ok_add() {
-        let mut s = GurBuilder::new().build(0);
+        let mut s = UrBuilder::new().build(0);
 
         let t1 = s.try_edit(|n| Ok(n + 1)).unwrap();
         assert_eq!(1, *t1);
@@ -286,7 +286,7 @@ mod test {
         let err_add = |n| "NaN".parse::<i32>().map(|p| p + n).map_err(|e| e.into());
         let add_one = |n| n + 1;
 
-        let mut s = GurBuilder::new().build(0);
+        let mut s = UrBuilder::new().build(0);
 
         assert_eq!(0, *s);
 
@@ -304,7 +304,7 @@ mod test {
     }
     #[test]
     fn deref() {
-        let mut s = GurBuilder::new().build(0);
+        let mut s = UrBuilder::new().build(0);
 
         s.edit(|n| n + 1);
         assert_eq!(1, *s);
@@ -322,7 +322,7 @@ mod test {
 
     #[test]
     fn undo() {
-        let mut s = GurBuilder::new().build(0);
+        let mut s = UrBuilder::new().build(0);
 
         let t0 = *s.get();
         assert_eq!(0, t0);
@@ -358,7 +358,7 @@ mod test {
     fn undo_redo_many() {
         let n = 100000;
 
-        let mut s = GurBuilder::new()
+        let mut s = UrBuilder::new()
             // To speed up undo()/redo(), a snapshot is sometimes created.
             .snapshot_trigger(|metrics| 10 < metrics.distance_from_snapshot())
             .build(0);
@@ -381,7 +381,7 @@ mod test {
 
     #[test]
     fn redo() {
-        let mut s = GurBuilder::new().build(0);
+        let mut s = UrBuilder::new().build(0);
 
         let t0 = *s.get();
         assert_eq!(0, t0);
@@ -421,7 +421,7 @@ mod test {
 
     #[test]
     fn edit_undo_edit() {
-        let mut s = GurBuilder::new().build(0);
+        let mut s = UrBuilder::new().build(0);
 
         let t0 = s.get();
         assert_eq!(0, *t0);
@@ -439,7 +439,7 @@ mod test {
 
     #[test]
     fn edit_undo_edit_edit_undo_redo() {
-        let mut s = GurBuilder::new().build(0);
+        let mut s = UrBuilder::new().build(0);
 
         let t0 = *s.get();
         assert_eq!(0, t0);

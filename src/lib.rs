@@ -1,21 +1,21 @@
 //! Example
 //!
 //! ```rust
-//! use gur::gur::{GurBuilder, Gur};
+//! use gur::ur::{UrBuilder, Ur};
 //!
 //! fn main() {
-//!     let mut gur = GurBuilder::new().build(0 as i32);
+//!     let mut ur = UrBuilder::new().build(0 as i32);
 //!
-//!     gur.edit(|n| n + 1);
-//!     assert_eq!(1, *gur);
+//!     ur.edit(|n| n + 1);
+//!     assert_eq!(1, *ur);
 //!
-//!     gur.undo().unwrap();
-//!     assert_eq!(0, *gur);
+//!     ur.undo().unwrap();
+//!     assert_eq!(0, *ur);
 //!
-//!     gur.redo().unwrap();
-//!     assert_eq!(1, *gur);
+//!     ur.redo().unwrap();
+//!     assert_eq!(1, *ur);
 //! }
 //! ```
-pub mod gur;
 pub mod metrics;
 mod node;
+pub mod ur;

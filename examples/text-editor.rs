@@ -1,4 +1,4 @@
-use gur::gur::{Gur, GurBuilder};
+use gur::ur::{Ur, UrBuilder};
 use std::cmp;
 use std::fs::File;
 use std::io;
@@ -8,8 +8,8 @@ use std::path::PathBuf;
 #[derive(Clone)]
 struct TextBuffer(Vec<char>);
 impl TextBuffer {
-    fn new<'a>(buffer: Vec<char>) -> Gur<'a, Self> {
-        GurBuilder::new().build(TextBuffer(buffer))
+    fn new<'a>(buffer: Vec<char>) -> Ur<'a, Self> {
+        UrBuilder::new().build(TextBuffer(buffer))
     }
 
     fn get(&self) -> &[char] {
@@ -28,7 +28,7 @@ impl TextBuffer {
 }
 
 struct TextEditor<'a> {
-    buffer: Gur<'a, TextBuffer>,
+    buffer: Ur<'a, TextBuffer>,
     cursor: usize,
     file: Option<PathBuf>,
 }
