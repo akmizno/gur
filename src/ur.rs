@@ -47,6 +47,13 @@ impl<'a, T: Default + Clone + 'a> Default for Ur<'a, T> {
         UrBuilder::new().build(T::default())
     }
 }
+
+impl<'a, T: std::fmt::Debug> std::fmt::Debug for Ur<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        self.get().fmt(f)
+    }
+}
+
 impl<'a, T: std::fmt::Display> std::fmt::Display for Ur<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.get().fmt(f)

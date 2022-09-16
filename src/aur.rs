@@ -68,6 +68,13 @@ impl<'a, T: Default + Clone + 'a> Default for Aur<'a, T> {
         AurBuilder::new().build(T::default())
     }
 }
+
+impl<'a, T: std::fmt::Debug> std::fmt::Debug for Aur<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        self.0.fmt(f)
+    }
+}
+
 impl<'a, T: std::fmt::Display> std::fmt::Display for Aur<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.0.fmt(f)
