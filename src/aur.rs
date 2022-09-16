@@ -20,7 +20,7 @@ impl<'a> AurBuilder<'a> {
         self
     }
 
-    pub fn build<T: Clone + 'a>(self, initial_state: T) -> Aur<'a, T> {
+    pub fn build<T: Clone>(self, initial_state: T) -> Aur<'a, T> {
         Aur::new(initial_state, self.snapshot_trigger)
     }
 }
@@ -28,7 +28,12 @@ impl<'a> AurBuilder<'a> {
 /// Ur<T> + Send + Sync
 pub struct Aur<'a, T>(Ur<'a, T>);
 
-impl<'a, T: Clone + 'a> Aur<'a, T> {
+impl<'a, T> Aur<'a, T> {
+    pub fn get(&self) -> &T {
+        self.0.get()
+    }
+}
+impl<'a, T: Clone> Aur<'a, T> {
     fn new(
         initial_state: T,
         snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
@@ -59,15 +64,9 @@ impl<'a, T: Clone + 'a> Aur<'a, T> {
 
 // NOTE
 // Implementing the Send and Sync for Aur<T> is safe,
-// since Aur<T> guarantees that all of internally stored functions implement the traits.
+// since Aur<T> guarantees that all of command and trigger functions implement the traits.
 unsafe impl<'a, T: Send> Send for Aur<'a, T> {}
 unsafe impl<'a, T: Sync> Sync for Aur<'a, T> {}
-
-impl<'a, T: Default + Clone + 'a> Default for Aur<'a, T> {
-    fn default() -> Self {
-        AurBuilder::new().build(T::default())
-    }
-}
 
 impl<'a, T: std::fmt::Debug> std::fmt::Debug for Aur<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {

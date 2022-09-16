@@ -22,7 +22,7 @@ impl<'a> UrBuilder<'a> {
         self
     }
 
-    pub fn build<T: Clone + 'a>(self, initial_state: T) -> Ur<'a, T> {
+    pub fn build<T: Clone>(self, initial_state: T) -> Ur<'a, T> {
         Ur::new(initial_state, self.snapshot_trigger)
     }
 }
@@ -40,12 +40,6 @@ pub struct Ur<'a, T> {
     current: usize,
 
     snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
-}
-
-impl<'a, T: Default + Clone + 'a> Default for Ur<'a, T> {
-    fn default() -> Self {
-        UrBuilder::new().build(T::default())
-    }
 }
 
 impl<'a, T: std::fmt::Debug> std::fmt::Debug for Ur<'a, T> {
@@ -67,13 +61,13 @@ impl<'a, T> std::ops::Deref for Ur<'a, T> {
     }
 }
 
-impl<'a, T: 'a> Ur<'a, T> {
+impl<'a, T> Ur<'a, T> {
     pub fn get(&self) -> &T {
         debug_assert!(self.state.is_some());
         unsafe { self.state.as_ref().unwrap_unchecked() }
     }
 }
-impl<'a, T: Clone + 'a> Ur<'a, T> {
+impl<'a, T: Clone> Ur<'a, T> {
     pub(crate) fn new(
         initial_state: T,
         snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
