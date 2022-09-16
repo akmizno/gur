@@ -28,11 +28,6 @@ impl<'a> AurBuilder<'a> {
 /// Ur<T> + Send + Sync
 pub struct Aur<'a, T>(Ur<'a, T>);
 
-impl<'a, T> Aur<'a, T> {
-    pub fn get(&self) -> &T {
-        self.0.get()
-    }
-}
 impl<'a, T: Clone> Aur<'a, T> {
     fn new(
         initial_state: T,

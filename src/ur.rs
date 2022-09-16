@@ -62,7 +62,7 @@ impl<'a, T> std::ops::Deref for Ur<'a, T> {
 }
 
 impl<'a, T> Ur<'a, T> {
-    pub fn get(&self) -> &T {
+    fn get(&self) -> &T {
         debug_assert!(self.state.is_some());
         unsafe { self.state.as_ref().unwrap_unchecked() }
     }
