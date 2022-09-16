@@ -16,6 +16,7 @@
 //!     assert_eq!(1, *ur);
 //! }
 //! ```
+pub mod aur;
 pub mod metrics;
 mod node;
 pub mod ur;
