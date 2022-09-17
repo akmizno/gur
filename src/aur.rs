@@ -38,8 +38,17 @@ impl<'a, T: Clone> Aur<'a, T> {
     pub fn undo(&mut self) -> Option<&T> {
         self.0.undo()
     }
+    pub fn undo_multi(&mut self, count: usize) -> Option<&T> {
+        self.0.undo_multi(count)
+    }
     pub fn redo(&mut self) -> Option<&T> {
         self.0.redo()
+    }
+    pub fn redo_multi(&mut self, count: usize) -> Option<&T> {
+        self.0.redo_multi(count)
+    }
+    pub fn jumpdo(&mut self, count: isize) -> Option<&T> {
+        self.0.jumpdo(count)
     }
 
     pub fn edit<F>(&mut self, command: F) -> &T
