@@ -1,6 +1,5 @@
 use crate::metrics::Metrics;
 use crate::node::Node;
-use std::iter::Iterator;
 use std::time::{Duration, Instant};
 
 pub struct UrBuilder<'a> {
@@ -102,15 +101,23 @@ impl<'a, T: Clone> Ur<'a, T> {
     }
 
     fn find_last_snapshot(&self, end: usize) -> (T, usize) {
-        if 0 < end {
-            for (node, i) in self.history[1..end].iter().rev().zip(1..) {
-                if let Some(s) = node.generator().generate_if_snapshot() {
-                    return (s, end - i);
-                }
-            }
+        debug_assert!(0 < end);
+        debug_assert!(end <= self.history.len());
+
+        let idx = end - 1;
+        let last = &self.history[idx];
+
+        if let Some(s) = last.generator().generate_if_snapshot() {
+            (s, idx)
+        } else {
+            let dist = last.metrics().distance_from_snapshot();
+            debug_assert!(dist <= idx);
+            let first_idx = idx - dist;
+            let first = &self.history[first_idx];
+            let s = first.generator().generate_if_snapshot();
+            debug_assert!(s.is_some());
+            (unsafe { s.unwrap_unchecked() }, first_idx)
         }
-        let s = self.history[0].generator().generate_if_snapshot().unwrap();
-        (s, 0)
     }
 
     fn undo_impl(&mut self) {
@@ -301,7 +308,7 @@ mod test {
         let n = 100000;
 
         let mut s = UrBuilder::new()
-            // To speed up undo()/redo(), a snapshot is sometimes created.
+            // This trigger sometimes inserts snapshots to speed up undo()/redo().
             .snapshot_trigger(|metrics| 10 < metrics.distance_from_snapshot())
             .build(0);
 
