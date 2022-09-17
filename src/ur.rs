@@ -79,11 +79,23 @@ impl<'a, T: Clone> Ur<'a, T> {
             snapshot_trigger,
         }
     }
+
     pub fn undo(&mut self) -> Option<&T> {
-        self.jumpdo(-1)
+        self.undo_multi(1)
     }
+
+    pub fn undo_multi(&mut self, count: usize) -> Option<&T> {
+        debug_assert!(count < isize::MAX as usize);
+        self.jumpdo(-(count as isize))
+    }
+
     pub fn redo(&mut self) -> Option<&T> {
-        self.jumpdo(1)
+        self.redo_multi(1)
+    }
+
+    pub fn redo_multi(&mut self, count: usize) -> Option<&T> {
+        debug_assert!(count < isize::MAX as usize);
+        self.jumpdo(count as isize)
     }
 
     pub fn jumpdo(&mut self, count: isize) -> Option<&T> {
@@ -443,21 +455,77 @@ mod test {
         let t5 = *s.edit(|n| n + 9); // 65
 
         // undo by jumpdo()
-        s.jumpdo(-1);
+        let j4 = s.jumpdo(-1).unwrap();
+        assert_eq!(t4, *j4);
         assert_eq!(t4, *s);
-        s.jumpdo(-2);
+        let j2 = s.jumpdo(-2).unwrap();
+        assert_eq!(t2, *j2);
         assert_eq!(t2, *s);
         assert!(s.jumpdo(-3).is_none());
-        s.jumpdo(-2);
+        let j0 = s.jumpdo(-2).unwrap();
+        assert_eq!(t0, *j0);
         assert_eq!(t0, *s);
 
         // redo by jumpdo()
-        s.jumpdo(1);
+        let j1 = s.jumpdo(1).unwrap();
+        assert_eq!(t1, *j1);
         assert_eq!(t1, *s);
-        s.jumpdo(2);
+        let j3 = s.jumpdo(2).unwrap();
+        assert_eq!(t3, *j3);
         assert_eq!(t3, *s);
         assert!(s.jumpdo(3).is_none());
-        s.jumpdo(2);
+        let j5 = s.jumpdo(2).unwrap();
+        assert_eq!(t5, *j5);
+        assert_eq!(t5, *s);
+    }
+
+    #[test]
+    fn undo_multi() {
+        let mut s = UrBuilder::new().build(0);
+
+        let t0 = *s.get(); // 0
+        let _t1 = *s.edit(|n| n + 1); // 1
+        let t2 = *s.edit(|n| n * 3); // 3
+        let _t3 = *s.edit(|n| n + 5); // 8
+        let t4 = *s.edit(|n| n * 7); // 56
+        let _t5 = *s.edit(|n| n + 9); // 65
+
+        let u4 = s.undo_multi(1).unwrap();
+        assert_eq!(t4, *u4);
+        assert_eq!(t4, *s);
+        let u2 = s.undo_multi(2).unwrap();
+        assert_eq!(t2, *u2);
+        assert_eq!(t2, *s);
+        assert!(s.undo_multi(3).is_none());
+        let u0 = s.undo_multi(2).unwrap();
+        assert_eq!(t0, *u0);
+        assert_eq!(t0, *s);
+    }
+
+    #[test]
+    fn redo_multi() {
+        let mut s = UrBuilder::new().build(0);
+
+        let t0 = *s.get(); // 0
+        let t1 = *s.edit(|n| n + 1); // 1
+        let _t2 = *s.edit(|n| n * 3); // 3
+        let t3 = *s.edit(|n| n + 5); // 8
+        let _t4 = *s.edit(|n| n * 7); // 56
+        let t5 = *s.edit(|n| n + 9); // 65
+
+        let u0 = s.undo_multi(5).unwrap();
+        assert_eq!(t0, *u0);
+        assert_eq!(t0, *s);
+
+        let r1 = s.redo_multi(1).unwrap();
+        assert_eq!(t1, *r1);
+        assert_eq!(t1, *s);
+        let r3 = s.redo_multi(2).unwrap();
+        assert_eq!(t3, *r3);
+        assert_eq!(t3, *s);
+        assert!(s.redo_multi(3).is_none());
+        let r5 = s.redo_multi(2).unwrap();
+        assert_eq!(t5, *r5);
         assert_eq!(t5, *s);
     }
 }
