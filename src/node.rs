@@ -29,10 +29,10 @@ impl<'a, T: Clone> Generator<'a, T> {
         }
     }
 
-    pub(crate) fn generate(&self, prev: T) -> T {
+    pub(crate) fn is_snapshot(&self) -> bool {
         match self {
-            Self::Command(f) => f(prev),
-            Self::Snapshot(s) => *s.clone(),
+            Self::Snapshot(_) => true,
+            _ => false,
         }
     }
 }

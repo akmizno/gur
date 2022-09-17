@@ -85,7 +85,6 @@ impl<'a, T: Clone> Ur<'a, T> {
             None
         } else {
             self.undo_impl();
-            self.current -= 1;
             Some(self.get())
         }
     }
@@ -95,67 +94,70 @@ impl<'a, T: Clone> Ur<'a, T> {
             None
         } else {
             self.redo_impl();
-            self.current += 1;
             Some(self.get())
         }
     }
 
-    fn find_last_snapshot(&self, end: usize) -> (T, usize) {
-        debug_assert!(0 < end);
-        debug_assert!(end <= self.history.len());
+    fn get_regeneration_range(&self, target: usize) -> (usize, usize) {
+        debug_assert!(target < self.history.len());
+        let last_node = unsafe { self.history.get_unchecked(target) };
+        let dist = last_node.metrics().distance_from_snapshot();
+        debug_assert!(dist <= target);
+        let first = target - dist;
+        debug_assert!(self.history[first].generator().is_snapshot());
+        (first, target + 1)
+    }
 
-        let idx = end - 1;
-        let last = &self.history[idx];
-
-        if let Some(s) = last.generator().generate_if_snapshot() {
-            (s, idx)
-        } else {
-            let dist = last.metrics().distance_from_snapshot();
-            debug_assert!(dist <= idx);
-            let first_idx = idx - dist;
-            let first = &self.history[first_idx];
-            let s = first.generator().generate_if_snapshot();
-            debug_assert!(s.is_some());
-            (unsafe { s.unwrap_unchecked() }, first_idx)
+    fn regenerate(first_state: T, history: &[Node<'a, T>]) -> T {
+        let mut state = first_state;
+        for node in history {
+            let next = node.generator().generate_if_command(state);
+            debug_assert!(next.is_some());
+            state = unsafe { next.unwrap_unchecked() };
         }
+
+        state
+    }
+
+    fn reset_state(&mut self, target: usize) {
+        let (begin, end) = self.get_regeneration_range(target);
+
+        let first_state = unsafe {
+            self.history
+                .get_unchecked(begin)
+                .generator()
+                .generate_if_snapshot()
+                .unwrap_unchecked()
+        };
+
+        self.state = Some(Self::regenerate(first_state, &self.history[begin + 1..end]));
+        self.current = target;
     }
 
     fn undo_impl(&mut self) {
-        let (first_state, first_idx) = self.find_last_snapshot(self.current);
-        self.state = Some(first_state);
-
-        for i in first_idx + 1..self.current {
-            let prev = self.state.take().unwrap();
-
-            debug_assert!(i < self.history.len());
-            let next = self.history[i]
-                .generator()
-                .generate_if_command(prev)
-                .unwrap();
-            self.state = Some(next);
-        }
+        self.reset_state(self.current - 1)
     }
 
     fn redo_impl(&mut self) {
-        let node = &self.history[self.current + 1];
-        let new_state = node.generator().generate(self.state.take().unwrap());
-        self.state = Some(new_state);
-    }
+        let (begin, end) = self.get_regeneration_range(self.current + 1);
 
-    fn redo_from_last_snapshot(&mut self) {
-        let (first_state, first_idx) = self.find_last_snapshot(self.current + 1);
-        self.state = Some(first_state);
+        let (first_state, begin) = unsafe {
+            if begin < self.current {
+                // Reuse current state
+                (self.state.take().unwrap_unchecked(), self.current)
+            } else {
+                (
+                    self.history[begin]
+                        .generator()
+                        .generate_if_snapshot()
+                        .unwrap_unchecked(),
+                    begin,
+                )
+            }
+        };
 
-        for i in first_idx + 1..self.current + 1 {
-            let prev = self.state.take().unwrap();
-
-            debug_assert!(i < self.history.len());
-            let next = self.history[i]
-                .generator()
-                .generate_if_command(prev)
-                .unwrap();
-            self.state = Some(next);
-        }
+        self.state = Some(Self::regenerate(first_state, &self.history[begin + 1..end]));
+        self.current += 1;
     }
 
     fn edit_impl<F>(command: &F, old_state: T) -> (T, Duration)
@@ -212,7 +214,7 @@ impl<'a, T: Clone> Ur<'a, T> {
                 Ok(self.get())
             }
             Err(e) => {
-                self.redo_from_last_snapshot();
+                self.reset_state(self.current);
                 Err(e)
             }
         }
