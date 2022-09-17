@@ -80,22 +80,33 @@ impl<'a, T: Clone> Ur<'a, T> {
         }
     }
     pub fn undo(&mut self) -> Option<&T> {
-        debug_assert!(self.current < self.history.len());
-        if self.current == 0 {
-            None
-        } else {
-            self.undo_impl();
-            Some(self.get())
-        }
+        self.jumpdo(-1)
     }
     pub fn redo(&mut self) -> Option<&T> {
-        debug_assert!(self.current < self.history.len());
-        if self.current + 1 == self.history.len() {
-            None
-        } else {
-            self.redo_impl();
-            Some(self.get())
+        self.jumpdo(1)
+    }
+
+    pub fn jumpdo(&mut self, count: isize) -> Option<&T> {
+        if 0 == count {
+            // Nothing to do
+            return self.state.as_ref();
         }
+
+        // Check argments
+        if count < 0 {
+            // Undo
+            if self.current < count.abs() as usize {
+                return None;
+            }
+        } else {
+            // Redo
+            if self.history.len() <= self.current + count.abs() as usize {
+                return None;
+            }
+        }
+
+        self.jumpdo_impl(count);
+        self.state.as_ref()
     }
 
     fn get_regeneration_range(&self, target: usize) -> (usize, usize) {
@@ -119,30 +130,20 @@ impl<'a, T: Clone> Ur<'a, T> {
         state
     }
 
-    fn reset_state(&mut self, target: usize) {
-        let (begin, end) = self.get_regeneration_range(target);
-
-        let first_state = unsafe {
-            self.history
-                .get_unchecked(begin)
-                .generator()
-                .generate_if_snapshot()
-                .unwrap_unchecked()
+    fn jumpdo_impl(&mut self, count: isize) {
+        let target = if count < 0 {
+            debug_assert!(count.abs() as usize <= self.current);
+            self.current - count.abs() as usize
+        } else {
+            self.current + count as usize
         };
 
-        self.state = Some(Self::regenerate(first_state, &self.history[begin + 1..end]));
-        self.current = target;
-    }
+        debug_assert!(target < self.history.len());
 
-    fn undo_impl(&mut self) {
-        self.reset_state(self.current - 1)
-    }
-
-    fn redo_impl(&mut self) {
-        let (begin, end) = self.get_regeneration_range(self.current + 1);
+        let (begin, end) = self.get_regeneration_range(target);
 
         let (first_state, begin) = unsafe {
-            if begin < self.current {
+            if begin < self.current && self.current < end {
                 // Reuse current state
                 (self.state.take().unwrap_unchecked(), self.current)
             } else {
@@ -157,7 +158,23 @@ impl<'a, T: Clone> Ur<'a, T> {
         };
 
         self.state = Some(Self::regenerate(first_state, &self.history[begin + 1..end]));
-        self.current += 1;
+        self.current = target;
+    }
+
+    // Regenerate a target state from history WITHOUT reusing the current state.
+    fn reset_state(&mut self, target: usize) {
+        let (begin, end) = self.get_regeneration_range(target);
+
+        let first_state = unsafe {
+            self.history
+                .get_unchecked(begin)
+                .generator()
+                .generate_if_snapshot()
+                .unwrap_unchecked()
+        };
+
+        self.state = Some(Self::regenerate(first_state, &self.history[begin + 1..end]));
+        self.current = target;
     }
 
     fn edit_impl<F>(command: &F, old_state: T) -> (T, Duration)
@@ -412,5 +429,35 @@ mod test {
 
         let r3d = s.redo().unwrap();
         assert_eq!(25, *r3d);
+    }
+
+    #[test]
+    fn jumpdo() {
+        let mut s = UrBuilder::new().build(0);
+
+        let t0 = *s.get(); // 0
+        let t1 = *s.edit(|n| n + 1); // 1
+        let t2 = *s.edit(|n| n * 3); // 3
+        let t3 = *s.edit(|n| n + 5); // 8
+        let t4 = *s.edit(|n| n * 7); // 56
+        let t5 = *s.edit(|n| n + 9); // 65
+
+        // undo by jumpdo()
+        s.jumpdo(-1);
+        assert_eq!(t4, *s);
+        s.jumpdo(-2);
+        assert_eq!(t2, *s);
+        assert!(s.jumpdo(-3).is_none());
+        s.jumpdo(-2);
+        assert_eq!(t0, *s);
+
+        // redo by jumpdo()
+        s.jumpdo(1);
+        assert_eq!(t1, *s);
+        s.jumpdo(2);
+        assert_eq!(t3, *s);
+        assert!(s.jumpdo(3).is_none());
+        s.jumpdo(2);
+        assert_eq!(t5, *s);
     }
 }
