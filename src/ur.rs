@@ -157,10 +157,17 @@ impl<'a, T: Clone> Ur<'a, T> {
         let (first_state, begin) = unsafe {
             if begin < self.current && self.current < end {
                 // Reuse current state
+                debug_assert!(self.state.is_some());
                 (self.state.take().unwrap_unchecked(), self.current)
             } else {
+                // The current state is not resusable.
+
+                // Drop the old state before runnning.
+                self.state = None;
+
                 (
-                    self.history[begin]
+                    self.history
+                        .get_unchecked(begin)
                         .generator()
                         .generate_if_snapshot()
                         .unwrap_unchecked(),
@@ -175,6 +182,9 @@ impl<'a, T: Clone> Ur<'a, T> {
 
     // Regenerate a target state from history WITHOUT reusing the current state.
     fn reset_state(&mut self, target: usize) {
+        // Drop the old state before running.
+        self.state = None;
+
         let (begin, end) = self.get_regeneration_range(target);
 
         let first_state = unsafe {
