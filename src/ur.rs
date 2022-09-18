@@ -2,17 +2,23 @@ use crate::metrics::Metrics;
 use crate::node::Node;
 use std::time::{Duration, Instant};
 
+/// A builder to create an [Ur].
+///
 pub struct UrBuilder<'a> {
     snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
 }
 
 impl<'a> UrBuilder<'a> {
+    /// Create a new builder instance.
     pub fn new() -> Self {
         Self {
             snapshot_trigger: Box::new(|_m| false),
         }
     }
 
+    /// Takes a closure to decide whether to save a snapshot of internal state.
+    ///
+    /// See [Snapshot trigger](crate::triggers#Snapshot&#32;trigger) for more details.
     pub fn snapshot_trigger<F>(mut self, f: F) -> Self
     where
         F: FnMut(&Metrics) -> bool + 'a,
@@ -21,6 +27,7 @@ impl<'a> UrBuilder<'a> {
         self
     }
 
+    /// Create a new [Ur] object by the initial state of T.
     pub fn build<T: Clone>(self, initial_state: T) -> Ur<'a, T> {
         Ur::new(initial_state, self.snapshot_trigger)
     }
@@ -32,6 +39,49 @@ impl<'a> Default for UrBuilder<'a> {
     }
 }
 
+/// A wrapper type to provide basic undo-redo functionality.
+///
+/// # Generative approach
+/// A key idea of [Ur] is that "Undo is regenerating old state."
+///
+/// For explanation, there is a sample history of changes (t0, t1, t2, and t3) as
+/// shown in the following figure.
+/// When undoing the latest state (t3) to the previous state (t2),
+/// [Ur] will back to the snapshot (s0) and restore the initial state (t0),
+/// then redo the actions (a1 and a2) in order until the target state (t2) is obtained.
+/// ```txt
+/// t: state
+/// a: action
+/// s: snapshot
+///
+/// +---+ a1 +---+ a2 +---+ a3 +---+
+/// |t0 |--->|t1 |--->|t2 |--->|t3 |
+/// +---+    +---+    +---+    +---+
+///   |    +--------->           |
+/// +---+  |                     |
+/// |s0 |  +---------------------+
+/// ----+       undo t3 -> t2
+/// ```
+///
+/// [Ur] manages object state and its history of changes.
+/// To implement the above undoing procedure,
+/// the history is stored as chain of actions instead of chain of states.
+///
+/// # Performance customization
+/// There is a performance problem with this generative approach.
+/// For example, undoing may take too long time if the actions are heavy computational tasks.
+///
+/// The problem can be mitigated by taking snapshots at appropriate intervals.
+/// [Ur] provides a way to control the behavior by trigger functions.
+/// See [Triggers](crate::triggers) about it.
+///
+/// # Deref
+/// [Ur] implements [Deref](std::ops::Deref).
+///
+/// # Thread-safety
+/// [Ur] does not implement [Send] and [Sync].
+/// If you want a type [Ur] + [Send] + [Sync],
+/// [Aur](crate::aur::Aur) can be used.
 pub struct Ur<'a, T> {
     state: Option<T>,
 
@@ -39,25 +89,6 @@ pub struct Ur<'a, T> {
     current: usize,
 
     snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
-}
-
-impl<'a, T: std::fmt::Debug> std::fmt::Debug for Ur<'a, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        self.get().fmt(f)
-    }
-}
-
-impl<'a, T: std::fmt::Display> std::fmt::Display for Ur<'a, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        self.get().fmt(f)
-    }
-}
-
-impl<'a, T> std::ops::Deref for Ur<'a, T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        self.get()
-    }
 }
 
 impl<'a, T> Ur<'a, T> {
@@ -80,31 +111,67 @@ impl<'a, T: Clone> Ur<'a, T> {
         }
     }
 
+    /// Restore the previous state.
+    ///
+    /// Same as `self.undo_multi(1)`.
+    ///
+    /// # Return
+    /// [None] is returned if there is no older state in the history,
+    /// otherwise immutable reference to the updated internal state.
     pub fn undo(&mut self) -> Option<&T> {
         self.undo_multi(1)
     }
 
+    /// Undo multiple steps.
+    ///
+    /// This method is more efficient than running `self.undo()` multiple times.
+    ///
+    /// # Return
+    /// [None] is returned if the target state is out of the history,
+    /// otherwise immutable reference to the updated internal state.
+    /// If `count=0`, this method does nothing and returns reference to the current state.
     pub fn undo_multi(&mut self, count: usize) -> Option<&T> {
         debug_assert!(count < isize::MAX as usize);
         self.jumpdo(-(count as isize))
     }
 
+    /// Restore the next state.
+    ///
+    /// Same as `self.redo_multi(1)`.
+    ///
+    /// # Return
+    /// [None] is returned if there is no newer state in the history,
+    /// otherwise immutable reference to the updated internal state.
     pub fn redo(&mut self) -> Option<&T> {
         self.redo_multi(1)
     }
 
+    /// Redo multiple steps.
+    ///
+    /// This method is more efficient than running `self.redo()` multiple times.
+    ///
+    /// # Return
+    /// [None] is returned if the target state is out of the history,
+    /// otherwise immutable reference to the updated internal state.
+    /// If `count=0`, this method does nothing and returns reference to the current state.
     pub fn redo_multi(&mut self, count: usize) -> Option<&T> {
         debug_assert!(count < isize::MAX as usize);
         self.jumpdo(count as isize)
     }
 
+    /// Undo-redo bidirectionally.
+    ///
+    /// This is integrated method of [undo_multi](Ur::undo_multi) and [redo_multi](Ur::redo_multi).
+    ///
+    /// - `count < 0` => `self.undo_multi(-count)`.
+    /// - `0 < count` => `self.redo_multi(count)`.
     pub fn jumpdo(&mut self, count: isize) -> Option<&T> {
         if 0 == count {
             // Nothing to do
             return self.state.as_ref();
         }
 
-        // Check argments
+        // Check the argment
         if count < 0 {
             // Undo
             if self.current < count.abs() as usize {
@@ -209,6 +276,17 @@ impl<'a, T: Clone> Ur<'a, T> {
 
         (new_state, elapsed)
     }
+
+    /// Takes a closure and update the internal state by applying it.
+    ///
+    /// The closure consumes the current state and produces a new state.
+    ///
+    /// # Return
+    /// Immutable reference to the new state.
+    ///
+    /// # Remarks
+    /// The closure MUST produce a same result for a same input.
+    /// If it is impossible, use [try_edit](Ur::try_edit).
     pub fn edit<F>(&mut self, command: F) -> &T
     where
         F: Fn(T) -> T + 'a,
@@ -236,6 +314,17 @@ impl<'a, T: Clone> Ur<'a, T> {
         self.get()
     }
 
+    /// Takes a closure and update the internal state by applying it.
+    ///
+    /// The closure consumes the current state and produces a new state or an error.
+    /// If the closure returns an error, the internal state will not changed.
+    ///
+    /// # Return
+    /// Immutable reference to the new state or an error produced by the closure.
+    ///
+    /// # Remark
+    /// In this method, the produced state from the closure is stored as a snapshot always;
+    /// because of the type of closure is [FnOnce], same output can not be reproducible never again.
     pub fn try_edit<F>(&mut self, command: F) -> Result<&T, Box<dyn std::error::Error>>
     where
         F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,
@@ -257,6 +346,25 @@ impl<'a, T: Clone> Ur<'a, T> {
                 Err(e)
             }
         }
+    }
+}
+
+impl<'a, T: std::fmt::Debug> std::fmt::Debug for Ur<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        self.get().fmt(f)
+    }
+}
+
+impl<'a, T: std::fmt::Display> std::fmt::Display for Ur<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        self.get().fmt(f)
+    }
+}
+
+impl<'a, T> std::ops::Deref for Ur<'a, T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        self.get()
     }
 }
 

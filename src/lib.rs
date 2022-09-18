@@ -19,4 +19,5 @@
 pub mod aur;
 pub mod metrics;
 mod node;
+pub mod triggers;
 pub mod ur;
