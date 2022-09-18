@@ -58,6 +58,13 @@ impl<'a, T: Clone> Aur<'a, T> {
         self.0.edit(command)
     }
 
+    pub fn edit_if<F>(&mut self, command: F) -> Option<&T>
+    where
+        F: Fn(T) -> Option<T> + Send + Sync + 'a,
+    {
+        self.0.edit_if(command)
+    }
+
     pub fn try_edit<F>(&mut self, command: F) -> Result<&T, Box<dyn std::error::Error>>
     where
         F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,

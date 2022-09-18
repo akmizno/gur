@@ -266,18 +266,7 @@ impl<'a, T: Clone> Ur<'a, T> {
         self.current = target;
     }
 
-    fn edit_impl<F>(command: &F, old_state: T) -> (T, Duration)
-    where
-        F: Fn(T) -> T + 'a,
-    {
-        let now = Instant::now();
-        let new_state = command(old_state);
-        let elapsed = now.elapsed();
-
-        (new_state, elapsed)
-    }
-
-    /// Takes a closure and update the internal state by applying it.
+    /// Takes a closure and update the internal state.
     ///
     /// The closure consumes the current state and produces a new state.
     ///
@@ -291,11 +280,38 @@ impl<'a, T: Clone> Ur<'a, T> {
     where
         F: Fn(T) -> T + 'a,
     {
+        // NOTE
+        // This call is guaranteed to succeed.
+        unsafe { self.edit_if(move |s| Some(command(s))).unwrap_unchecked() }
+    }
+
+    /// Takes a closure and update the internal state.
+    ///
+    /// The closure consumes the current state and produces a new state or [None].
+    /// If the closure returns [None], the internal state is not changed.
+    ///
+    /// # Return
+    /// Immutable reference to the new state or [None]
+    ///
+    /// # Remarks
+    /// The closure MUST produce a same result for a same input.
+    /// If it is impossible, use [try_edit](Ur::try_edit).
+    pub fn edit_if<F>(&mut self, command: F) -> Option<&T>
+    where
+        F: Fn(T) -> Option<T> + 'a,
+    {
         debug_assert!(self.state.is_some());
 
         let old_state = unsafe { self.state.take().unwrap_unchecked() };
 
-        let (new_state, elapsed) = Self::edit_impl(&command, old_state);
+        let (new_state, elapsed) =
+            if let Some((new_state, elapsed)) = Self::edit_if_impl(&command, old_state) {
+                (new_state, elapsed)
+            } else {
+                // Reset the current state
+                self.reset_state(self.current);
+                return None;
+            };
 
         self.history.truncate(self.current + 1);
 
@@ -305,19 +321,38 @@ impl<'a, T: Clone> Ur<'a, T> {
         if (self.snapshot_trigger)(&new_metrics) {
             self.history.push(Node::from_state(&new_state));
         } else {
-            self.history.push(Node::from_command(command, new_metrics));
+            self.history.push(Node::from_command(
+                // This must succeed.
+                move |s| unsafe { command(s).unwrap_unchecked() },
+                new_metrics,
+            ));
         }
 
         self.current += 1;
 
         self.state.replace(new_state);
-        self.get()
+        Some(self.get())
     }
 
-    /// Takes a closure and update the internal state by applying it.
+    fn edit_if_impl<F>(command: &F, old_state: T) -> Option<(T, Duration)>
+    where
+        F: Fn(T) -> Option<T> + 'a,
+    {
+        let now = Instant::now();
+        let new_state = command(old_state);
+        let elapsed = now.elapsed();
+
+        if let Some(new_state) = new_state {
+            Some((new_state, elapsed))
+        } else {
+            None
+        }
+    }
+
+    /// Takes a closure and update the internal state.
     ///
     /// The closure consumes the current state and produces a new state or an error.
-    /// If the closure returns an error, the internal state will not changed.
+    /// If the closure returns an error, the internal state is not changed.
     ///
     /// # Return
     /// Immutable reference to the new state or an error produced by the closure.
@@ -645,5 +680,20 @@ mod test {
         let r5 = s.redo_multi(2).unwrap();
         assert_eq!(t5, *r5);
         assert_eq!(t5, *s);
+    }
+
+    #[test]
+    fn edit_if() {
+        let mut s = UrBuilder::new().build(0);
+
+        let t0 = s.get();
+        assert_eq!(0, *t0);
+
+        let t_some = s.edit_if(|n| Some(n + 1));
+        assert_eq!(1, *t_some.unwrap());
+        assert_eq!(1, *s);
+        let t_none = s.edit_if(|_| None);
+        assert!(t_none.is_none());
+        assert_eq!(1, *s);
     }
 }
