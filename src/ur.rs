@@ -142,7 +142,7 @@ impl<'a, T: Clone> Ur<'a, T> {
     /// Same as `self.undo_multi(1)`.
     ///
     /// # Return
-    /// [None] is returned if there is no older state in the history,
+    /// [None] is returned if there is no older version in the history,
     /// otherwise immutable reference to the updated internal state.
     pub fn undo(&mut self) -> Option<&T> {
         self.undo_multi(1)
@@ -153,7 +153,7 @@ impl<'a, T: Clone> Ur<'a, T> {
     /// This method is more efficient than running `self.undo()` multiple times.
     ///
     /// # Return
-    /// [None] is returned if the target state is out of the history,
+    /// [None] is returned if the target version is out of the history,
     /// otherwise immutable reference to the updated internal state.
     /// If `count=0`, this method does nothing and returns reference to the current state.
     pub fn undo_multi(&mut self, count: usize) -> Option<&T> {
@@ -166,7 +166,7 @@ impl<'a, T: Clone> Ur<'a, T> {
     /// Same as `self.redo_multi(1)`.
     ///
     /// # Return
-    /// [None] is returned if there is no newer state in the history,
+    /// [None] is returned if there is no newer version in the history,
     /// otherwise immutable reference to the updated internal state.
     pub fn redo(&mut self) -> Option<&T> {
         self.redo_multi(1)
@@ -177,7 +177,7 @@ impl<'a, T: Clone> Ur<'a, T> {
     /// This method is more efficient than running `self.redo()` multiple times.
     ///
     /// # Return
-    /// [None] is returned if the target state is out of the history,
+    /// [None] is returned if the target version is out of the history,
     /// otherwise immutable reference to the updated internal state.
     /// If `count=0`, this method does nothing and returns reference to the current state.
     pub fn redo_multi(&mut self, count: usize) -> Option<&T> {
@@ -319,7 +319,7 @@ impl<'a, T: Clone> Ur<'a, T> {
     /// If the closure returns [None], the internal state is not changed.
     ///
     /// # Return
-    /// Immutable reference to the new state or [None]
+    /// Immutable reference to the new state or [None].
     ///
     /// # Remarks
     /// The closure MUST produce a same result for a same input.
@@ -385,7 +385,7 @@ impl<'a, T: Clone> Ur<'a, T> {
     ///
     /// # Remark
     /// In this method, the produced state from the closure is stored as a snapshot always;
-    /// because of the type of closure is [FnOnce], same output can not be reproducible never again.
+    /// because the type of closure is [FnOnce], same output can not be reproducible never again.
     pub fn try_edit<F>(&mut self, command: F) -> Result<&T, Box<dyn std::error::Error>>
     where
         F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,
