@@ -83,6 +83,10 @@ impl<'a> Default for UrBuilder<'a> {
 /// If you want a type [Ur] + [Send] + [Sync],
 /// [Aur](crate::aur::Aur) can be used.
 pub struct Ur<'a, T> {
+    // Some means that the current state is owned by itself.
+    // None means that the current state is not owned by this variable.
+    // In this case, the self.history[self.current] should be accessed as a snapshot node and
+    // it is used as a current state.
     state: Option<T>,
 
     history: Vec<Node<'a, T>>,
@@ -93,18 +97,40 @@ pub struct Ur<'a, T> {
 
 impl<'a, T> Ur<'a, T> {
     fn get(&self) -> &T {
-        debug_assert!(self.state.is_some());
-        unsafe { self.state.as_ref().unwrap_unchecked() }
+        if let Some(s) = self.state.as_ref() {
+            s
+        } else {
+            unsafe { self.get_snapshot_unchecked(self.current) }
+        }
+    }
+
+    unsafe fn get_snapshot_unchecked(&self, target: usize) -> &T {
+        debug_assert!(target < self.history.len());
+        debug_assert!(self.history[target].generator().is_snapshot());
+        self.history
+            .get_unchecked(target)
+            .generator()
+            .generate_if_snapshot()
+            .unwrap_unchecked()
     }
 }
 impl<'a, T: Clone> Ur<'a, T> {
+    fn take(&mut self) -> T {
+        if let Some(s) = self.state.take() {
+            s
+        } else {
+            // Clone from the snapshot
+            self.get().clone()
+        }
+    }
+
     pub(crate) fn new(
         initial_state: T,
         snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
     ) -> Self {
-        let first_node = Node::from_state(&initial_state);
+        let first_node = Node::from_state(initial_state);
         Self {
-            state: Some(initial_state),
+            state: None,
             history: vec![first_node],
             current: 0,
             snapshot_trigger,
@@ -168,7 +194,7 @@ impl<'a, T: Clone> Ur<'a, T> {
     pub fn jumpdo(&mut self, count: isize) -> Option<&T> {
         if 0 == count {
             // Nothing to do
-            return self.state.as_ref();
+            return Some(self.get());
         }
 
         // Check the argment
@@ -185,7 +211,7 @@ impl<'a, T: Clone> Ur<'a, T> {
         }
 
         self.jumpdo_impl(count);
-        self.state.as_ref()
+        Some(self.get())
     }
 
     fn get_regeneration_range(&self, target: usize) -> (usize, usize) {
@@ -221,26 +247,26 @@ impl<'a, T: Clone> Ur<'a, T> {
 
         let (begin, end) = self.get_regeneration_range(target);
 
-        let (first_state, begin) = unsafe {
-            if begin < self.current && self.current < end {
-                // Reuse current state
-                debug_assert!(self.state.is_some());
-                (self.state.take().unwrap_unchecked(), self.current)
-            } else {
-                // The current state is not resusable.
+        if begin + 1 == end {
+            // Simply use the snapshot
+            debug_assert!(begin == target);
+            self.state = None;
+            self.current = target;
+            return;
+        }
 
-                // Drop the old state before runnning.
-                self.state = None;
+        let (first_state, begin) = if begin < self.current && self.current < end {
+            // Reuse current state
+            debug_assert!(self.state.is_some());
+            (self.take(), self.current)
+        } else {
+            // The current state is not resusable.
 
-                (
-                    self.history
-                        .get_unchecked(begin)
-                        .generator()
-                        .generate_if_snapshot()
-                        .unwrap_unchecked(),
-                    begin,
-                )
-            }
+            // Drop the old state before runnning.
+            self.state = None;
+
+            let snapshot = unsafe { self.get_snapshot_unchecked(begin) };
+            (snapshot.clone(), begin)
         };
 
         self.state = Some(Self::regenerate(first_state, &self.history[begin + 1..end]));
@@ -254,16 +280,18 @@ impl<'a, T: Clone> Ur<'a, T> {
 
         let (begin, end) = self.get_regeneration_range(target);
 
-        let first_state = unsafe {
-            self.history
-                .get_unchecked(begin)
-                .generator()
-                .generate_if_snapshot()
-                .unwrap_unchecked()
-        };
-
-        self.state = Some(Self::regenerate(first_state, &self.history[begin + 1..end]));
         self.current = target;
+
+        if begin + 1 == end {
+            // Simply use snapshot
+            return;
+        }
+
+        let first_state = unsafe { self.get_snapshot_unchecked(begin) };
+        self.state = Some(Self::regenerate(
+            first_state.clone(),
+            &self.history[begin + 1..end],
+        ));
     }
 
     /// Takes a closure and update the internal state.
@@ -300,9 +328,7 @@ impl<'a, T: Clone> Ur<'a, T> {
     where
         F: Fn(T) -> Option<T> + 'a,
     {
-        debug_assert!(self.state.is_some());
-
-        let old_state = unsafe { self.state.take().unwrap_unchecked() };
+        let old_state = self.take();
 
         let (new_state, elapsed) =
             if let Some((new_state, elapsed)) = Self::edit_if_impl(&command, old_state) {
@@ -319,18 +345,18 @@ impl<'a, T: Clone> Ur<'a, T> {
         let new_metrics = last_metrics.make_next(elapsed);
 
         if (self.snapshot_trigger)(&new_metrics) {
-            self.history.push(Node::from_state(&new_state));
+            self.history.push(Node::from_state(new_state));
+            self.state = None;
         } else {
             self.history.push(Node::from_command(
                 // This must succeed.
                 move |s| unsafe { command(s).unwrap_unchecked() },
                 new_metrics,
             ));
+            self.state.replace(new_state);
         }
 
         self.current += 1;
-
-        self.state.replace(new_state);
         Some(self.get())
     }
 
@@ -364,16 +390,14 @@ impl<'a, T: Clone> Ur<'a, T> {
     where
         F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,
     {
-        debug_assert!(self.state.is_some());
-
-        let old_state = unsafe { self.state.take().unwrap_unchecked() };
+        let old_state = self.take();
         match command(old_state) {
             Ok(new_state) => {
                 self.history.truncate(self.current + 1);
-                self.history.push(Node::from_state(&new_state));
+                self.history.push(Node::from_state(new_state));
                 self.current += 1;
 
-                self.state.replace(new_state);
+                debug_assert!(self.state.is_none());
                 Ok(self.get())
             }
             Err(e) => {

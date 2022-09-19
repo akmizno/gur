@@ -5,20 +5,20 @@ pub(crate) enum Generator<'a, T> {
     Snapshot(Box<T>),
 }
 
-impl<'a, T: Clone> Generator<'a, T> {
+impl<'a, T> Generator<'a, T> {
     pub(crate) fn from_command<F>(command: F) -> Self
     where
         F: Fn(T) -> T + 'a,
     {
         Generator::Command(Box::new(command))
     }
-    pub(crate) fn from_state(state: &T) -> Self {
-        Generator::Snapshot(Box::new(state.clone()))
+    pub(crate) fn from_state(state: T) -> Self {
+        Generator::Snapshot(Box::new(state))
     }
 
-    pub(crate) fn generate_if_snapshot(&self) -> Option<T> {
+    pub(crate) fn generate_if_snapshot(&self) -> Option<&T> {
         match self {
-            Self::Snapshot(s) => Some(*s.clone()),
+            Self::Snapshot(s) => Some(s),
             _ => None,
         }
     }
@@ -42,7 +42,7 @@ pub(crate) struct Node<'a, T> {
     metrics: Metrics,
 }
 
-impl<'a, T: Clone> Node<'a, T> {
+impl<'a, T> Node<'a, T> {
     pub(crate) fn from_command<F>(command: F, metrics: Metrics) -> Self
     where
         F: Fn(T) -> T + 'a,
@@ -52,7 +52,7 @@ impl<'a, T: Clone> Node<'a, T> {
             metrics: metrics,
         }
     }
-    pub(crate) fn from_state(state: &T) -> Self {
+    pub(crate) fn from_state(state: T) -> Self {
         Self {
             generator: Generator::from_state(state),
             metrics: Metrics::zero(),
