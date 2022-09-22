@@ -1,27 +1,28 @@
 use crate::metrics::Metrics;
-use crate::ur::Ur;
+use crate::ur::{Ur, UrBuilder};
 
 pub struct AurBuilder<'a> {
-    snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
+    builder: UrBuilder<'a>,
 }
 
 impl<'a> AurBuilder<'a> {
     pub fn new() -> Self {
         Self {
-            snapshot_trigger: Box::new(|_m| false),
+            builder: UrBuilder::new(),
         }
     }
 
-    pub fn snapshot_trigger<F>(mut self, f: F) -> Self
+    pub fn snapshot_trigger<F>(self, f: F) -> Self
     where
         F: FnMut(&Metrics) -> bool + Send + Sync + 'a,
     {
-        self.snapshot_trigger = Box::new(f);
-        self
+        Self {
+            builder: self.builder.snapshot_trigger(f),
+        }
     }
 
     pub fn build<T: Clone>(self, initial_state: T) -> Aur<'a, T> {
-        Aur::new(initial_state, self.snapshot_trigger)
+        Aur::new(self.builder.build(initial_state))
     }
 }
 
@@ -29,11 +30,8 @@ impl<'a> AurBuilder<'a> {
 pub struct Aur<'a, T>(Ur<'a, T>);
 
 impl<'a, T: Clone> Aur<'a, T> {
-    fn new(
-        initial_state: T,
-        snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + Send + Sync + 'a>,
-    ) -> Self {
-        Self(Ur::new(initial_state, snapshot_trigger))
+    fn new(ur: Ur<'a, T>) -> Self {
+        Self(ur)
     }
     pub fn undo(&mut self) -> Option<&T> {
         self.0.undo()
