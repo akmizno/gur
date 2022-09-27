@@ -8,8 +8,8 @@ use std::path::PathBuf;
 #[derive(Clone)]
 struct TextBuffer(Vec<char>);
 impl TextBuffer {
-    fn new<'a>(buffer: Vec<char>) -> Ur<'a, Self> {
-        UrBuilder::new().build(TextBuffer(buffer))
+    fn new<'a>(buffer: Vec<char>) -> Ur<'a, Self, Self> {
+        UrBuilder::default().build(TextBuffer(buffer))
     }
 
     fn get(&self) -> &[char] {
@@ -28,7 +28,7 @@ impl TextBuffer {
 }
 
 struct TextEditor<'a> {
-    buffer: Ur<'a, TextBuffer>,
+    buffer: Ur<'a, TextBuffer, TextBuffer>,
     cursor: usize,
     file: Option<PathBuf>,
 }

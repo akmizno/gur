@@ -1,18 +1,38 @@
 use crate::metrics::Metrics;
 use crate::node::Node;
+use crate::snapshot::{CloneMaker, SnapshotMaker};
 use std::time::{Duration, Instant};
 
 /// A builder to create an [Ur].
 ///
-pub struct UrBuilder<'a> {
+pub struct UrBuilder<'a, T, S> {
     snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
+    snapshot_maker: Box<dyn SnapshotMaker<State = T, Snapshot = S> + 'a>,
 }
 
-impl<'a> UrBuilder<'a> {
+impl<'a, T> UrBuilder<'a, T, T> {
     /// Create a new builder instance.
-    pub fn new() -> Self {
+    fn new<F, M>(f: F, m: M) -> Self
+    where
+        F: FnMut(&Metrics) -> bool + 'a,
+        M: SnapshotMaker<State = T, Snapshot = T> + 'a,
+    {
+        Self {
+            snapshot_trigger: Box::new(f),
+            snapshot_maker: Box::new(m),
+        }
+    }
+}
+
+impl<'a, T, S> UrBuilder<'a, T, S> {
+    /// Create a new builder instance.
+    pub fn from_maker<M>(m: M) -> Self
+    where
+        M: SnapshotMaker<State = T, Snapshot = S> + 'a,
+    {
         Self {
             snapshot_trigger: Box::new(|_m| false),
+            snapshot_maker: Box::new(m),
         }
     }
 
@@ -28,14 +48,14 @@ impl<'a> UrBuilder<'a> {
     }
 
     /// Create a new [Ur] object by the initial state of T.
-    pub fn build<T: Clone>(self, initial_state: T) -> Ur<'a, T> {
-        Ur::new(initial_state, self.snapshot_trigger)
+    pub fn build(self, initial_state: T) -> Ur<'a, T, S> {
+        Ur::new(initial_state, self.snapshot_trigger, self.snapshot_maker)
     }
 }
 
-impl<'a> Default for UrBuilder<'a> {
+impl<'a, T: Clone + 'a> Default for UrBuilder<'a, T, T> {
     fn default() -> Self {
-        Self::new()
+        Self::new(|_m| false, CloneMaker::new())
     }
 }
 
@@ -82,58 +102,57 @@ impl<'a> Default for UrBuilder<'a> {
 /// [Ur] does not implement [Send] and [Sync].
 /// If you want a type [Ur] + [Send] + [Sync],
 /// [Aur](crate::aur::Aur) can be used.
-pub struct Ur<'a, T> {
+pub struct Ur<'a, T, S> {
     // Some means that the current state is owned by itself.
     // None means that the current state is not owned by this variable.
     // In this case, the self.history[self.current] should be accessed as a snapshot node and
     // it is used as a current state.
     state: Option<T>,
 
-    history: Vec<Node<'a, T>>,
+    history: Vec<Node<'a, T, S>>,
     current: usize,
 
     snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
+    snapshot_maker: Box<dyn SnapshotMaker<State = T, Snapshot = S> + 'a>,
 }
 
-impl<'a, T> Ur<'a, T> {
+impl<'a, T, S> Ur<'a, T, S> {
     fn get(&self) -> &T {
-        if let Some(s) = self.state.as_ref() {
-            s
-        } else {
-            unsafe { self.get_snapshot_unchecked(self.current) }
-        }
+        debug_assert!(self.state.is_some());
+        unsafe { self.state.as_ref().unwrap_unchecked() }
     }
 
-    unsafe fn get_snapshot_unchecked(&self, target: usize) -> &T {
+    unsafe fn restore_from_snapshot(&self, target: usize) -> T {
         debug_assert!(target < self.history.len());
         debug_assert!(self.history[target].generator().is_snapshot());
-        self.history
+
+        let snapshot = self
+            .history
             .get_unchecked(target)
             .generator()
             .generate_if_snapshot()
-            .unwrap_unchecked()
+            .unwrap_unchecked();
+
+        self.snapshot_maker.from_snapshot(snapshot)
     }
-}
-impl<'a, T: Clone> Ur<'a, T> {
+
     fn take(&mut self) -> T {
-        if let Some(s) = self.state.take() {
-            s
-        } else {
-            // Clone from the snapshot
-            self.get().clone()
-        }
+        debug_assert!(self.state.is_some());
+        unsafe { self.state.take().unwrap_unchecked() }
     }
 
     pub(crate) fn new(
         initial_state: T,
         snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
+        snapshot_maker: Box<dyn SnapshotMaker<State = T, Snapshot = S> + 'a>,
     ) -> Self {
-        let first_node = Node::from_state(initial_state);
+        let first_node = Node::from_snapshot(snapshot_maker.to_snapshot(&initial_state));
         Self {
-            state: None,
+            state: Some(initial_state),
             history: vec![first_node],
             current: 0,
             snapshot_trigger,
+            snapshot_maker,
         }
     }
 
@@ -224,7 +243,7 @@ impl<'a, T: Clone> Ur<'a, T> {
         (first, target + 1)
     }
 
-    fn regenerate(first_state: T, history: &[Node<'a, T>]) -> T {
+    fn regenerate(first_state: T, history: &[Node<'a, T, S>]) -> T {
         let mut state = first_state;
         for node in history {
             let next = node.generator().generate_if_command(state);
@@ -236,6 +255,8 @@ impl<'a, T: Clone> Ur<'a, T> {
     }
 
     fn jumpdo_impl(&mut self, count: isize) {
+        debug_assert!(count != 0);
+
         let target = if count < 0 {
             debug_assert!(count.abs() as usize <= self.current);
             self.current - count.abs() as usize
@@ -247,15 +268,7 @@ impl<'a, T: Clone> Ur<'a, T> {
 
         let (begin, end) = self.get_regeneration_range(target);
 
-        if begin + 1 == end {
-            // Simply use the snapshot
-            debug_assert!(begin == target);
-            self.state = None;
-            self.current = target;
-            return;
-        }
-
-        let (first_state, begin) = if begin < self.current && self.current < end {
+        let (first_state, begin) = if begin <= self.current && self.current < end {
             // Reuse current state
             debug_assert!(self.state.is_some());
             (self.take(), self.current)
@@ -265,8 +278,8 @@ impl<'a, T: Clone> Ur<'a, T> {
             // Drop the old state before runnning.
             self.state = None;
 
-            let snapshot = unsafe { self.get_snapshot_unchecked(begin) };
-            (snapshot.clone(), begin)
+            let restored = unsafe { self.restore_from_snapshot(begin) };
+            (restored, begin)
         };
 
         self.state = Some(Self::regenerate(first_state, &self.history[begin + 1..end]));
@@ -280,18 +293,9 @@ impl<'a, T: Clone> Ur<'a, T> {
 
         let (begin, end) = self.get_regeneration_range(target);
 
+        let first_state = unsafe { self.restore_from_snapshot(begin) };
+        self.state = Some(Self::regenerate(first_state, &self.history[begin + 1..end]));
         self.current = target;
-
-        if begin + 1 == end {
-            // Simply use snapshot
-            return;
-        }
-
-        let first_state = unsafe { self.get_snapshot_unchecked(begin) };
-        self.state = Some(Self::regenerate(
-            first_state.clone(),
-            &self.history[begin + 1..end],
-        ));
     }
 
     /// Takes a closure and update the internal state.
@@ -345,17 +349,18 @@ impl<'a, T: Clone> Ur<'a, T> {
         let new_metrics = last_metrics.make_next(elapsed);
 
         if (self.snapshot_trigger)(&new_metrics) {
-            self.history.push(Node::from_state(new_state));
-            self.state = None;
+            self.history.push(Node::from_snapshot(
+                self.snapshot_maker.to_snapshot(&new_state),
+            ));
         } else {
             self.history.push(Node::from_command(
                 // This must succeed.
                 move |s| unsafe { command(s).unwrap_unchecked() },
                 new_metrics,
             ));
-            self.state.replace(new_state);
         }
 
+        self.state.replace(new_state);
         self.current += 1;
         Some(self.get())
     }
@@ -394,10 +399,13 @@ impl<'a, T: Clone> Ur<'a, T> {
         match command(old_state) {
             Ok(new_state) => {
                 self.history.truncate(self.current + 1);
-                self.history.push(Node::from_state(new_state));
+                self.history.push(Node::from_snapshot(
+                    self.snapshot_maker.to_snapshot(&new_state),
+                ));
+
+                self.state.replace(new_state);
                 self.current += 1;
 
-                debug_assert!(self.state.is_none());
                 Ok(self.get())
             }
             Err(e) => {
@@ -408,19 +416,19 @@ impl<'a, T: Clone> Ur<'a, T> {
     }
 }
 
-impl<'a, T: std::fmt::Debug> std::fmt::Debug for Ur<'a, T> {
+impl<'a, T: std::fmt::Debug, S> std::fmt::Debug for Ur<'a, T, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.get().fmt(f)
     }
 }
 
-impl<'a, T: std::fmt::Display> std::fmt::Display for Ur<'a, T> {
+impl<'a, T: std::fmt::Display, S> std::fmt::Display for Ur<'a, T, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.get().fmt(f)
     }
 }
 
-impl<'a, T> std::ops::Deref for Ur<'a, T> {
+impl<'a, T, S> std::ops::Deref for Ur<'a, T, S> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.get()
@@ -433,7 +441,7 @@ mod test {
 
     #[test]
     fn ok_add() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = UrBuilder::default().build(0);
 
         let t1 = s.try_edit(|n| Ok(n + 1)).unwrap();
         assert_eq!(1, *t1);
@@ -443,7 +451,7 @@ mod test {
         let err_add = |n| "NaN".parse::<i32>().map(|p| p + n).map_err(|e| e.into());
         let add_one = |n| n + 1;
 
-        let mut s = UrBuilder::new().build(0);
+        let mut s = UrBuilder::default().build(0);
 
         assert_eq!(0, *s);
 
@@ -461,7 +469,7 @@ mod test {
     }
     #[test]
     fn deref() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = UrBuilder::default().build(0);
 
         s.edit(|n| n + 1);
         assert_eq!(1, *s);
@@ -479,7 +487,7 @@ mod test {
 
     #[test]
     fn undo() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = UrBuilder::default().build(0);
 
         let t0 = *s.get();
         assert_eq!(0, t0);
@@ -515,7 +523,7 @@ mod test {
     fn undo_redo_many() {
         let n = 100000;
 
-        let mut s = UrBuilder::new()
+        let mut s = UrBuilder::default()
             // This trigger sometimes inserts snapshots to speed up undo()/redo().
             .snapshot_trigger(|metrics| 10 < metrics.distance_from_snapshot())
             .build(0);
@@ -538,7 +546,7 @@ mod test {
 
     #[test]
     fn redo() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = UrBuilder::default().build(0);
 
         let t0 = *s.get();
         assert_eq!(0, t0);
@@ -578,7 +586,7 @@ mod test {
 
     #[test]
     fn edit_undo_edit() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = UrBuilder::default().build(0);
 
         let t0 = s.get();
         assert_eq!(0, *t0);
@@ -596,7 +604,7 @@ mod test {
 
     #[test]
     fn edit_undo_edit_edit_undo_redo() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = UrBuilder::default().build(0);
 
         let t0 = *s.get();
         assert_eq!(0, t0);
@@ -622,7 +630,7 @@ mod test {
 
     #[test]
     fn jumpdo() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = UrBuilder::default().build(0);
 
         let t0 = *s.get(); // 0
         let t1 = *s.edit(|n| n + 1); // 1
@@ -658,7 +666,7 @@ mod test {
 
     #[test]
     fn undo_multi() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = UrBuilder::default().build(0);
 
         let t0 = *s.get(); // 0
         let _t1 = *s.edit(|n| n + 1); // 1
@@ -681,7 +689,7 @@ mod test {
 
     #[test]
     fn redo_multi() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = UrBuilder::default().build(0);
 
         let t0 = *s.get(); // 0
         let t1 = *s.edit(|n| n + 1); // 1
@@ -708,7 +716,7 @@ mod test {
 
     #[test]
     fn edit_if() {
-        let mut s = UrBuilder::new().build(0);
+        let mut s = UrBuilder::default().build(0);
 
         let t0 = s.get();
         assert_eq!(0, *t0);

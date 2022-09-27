@@ -1,22 +1,22 @@
 use crate::metrics::Metrics;
 
-pub(crate) enum Generator<'a, T> {
+pub(crate) enum Generator<'a, T, S> {
     Command(Box<dyn Fn(T) -> T + 'a>),
-    Snapshot(Box<T>),
+    Snapshot(Box<S>),
 }
 
-impl<'a, T> Generator<'a, T> {
+impl<'a, T, S> Generator<'a, T, S> {
     pub(crate) fn from_command<F>(command: F) -> Self
     where
         F: Fn(T) -> T + 'a,
     {
         Generator::Command(Box::new(command))
     }
-    pub(crate) fn from_state(state: T) -> Self {
-        Generator::Snapshot(Box::new(state))
+    pub(crate) fn from_snapshot(snapshot: S) -> Self {
+        Generator::Snapshot(Box::new(snapshot))
     }
 
-    pub(crate) fn generate_if_snapshot(&self) -> Option<&T> {
+    pub(crate) fn generate_if_snapshot(&self) -> Option<&S> {
         match self {
             Self::Snapshot(s) => Some(s),
             _ => None,
@@ -37,12 +37,12 @@ impl<'a, T> Generator<'a, T> {
     }
 }
 
-pub(crate) struct Node<'a, T> {
-    generator: Generator<'a, T>,
+pub(crate) struct Node<'a, T, S> {
+    generator: Generator<'a, T, S>,
     metrics: Metrics,
 }
 
-impl<'a, T> Node<'a, T> {
+impl<'a, T, S> Node<'a, T, S> {
     pub(crate) fn from_command<F>(command: F, metrics: Metrics) -> Self
     where
         F: Fn(T) -> T + 'a,
@@ -52,14 +52,14 @@ impl<'a, T> Node<'a, T> {
             metrics: metrics,
         }
     }
-    pub(crate) fn from_state(state: T) -> Self {
+    pub(crate) fn from_snapshot(snapshot: S) -> Self {
         Self {
-            generator: Generator::from_state(state),
+            generator: Generator::from_snapshot(snapshot),
             metrics: Metrics::zero(),
         }
     }
 
-    pub(crate) fn generator(&self) -> &Generator<'a, T> {
+    pub(crate) fn generator(&self) -> &Generator<'a, T, S> {
         &self.generator
     }
     pub(crate) fn metrics(&self) -> &Metrics {
