@@ -1,4 +1,4 @@
-use gur::ur::{Ur, UrBuilder};
+use gur::cur::{Cur, CurBuilder};
 use rand::prelude::*;
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -23,20 +23,20 @@ impl Array {
 }
 
 struct App<'a> {
-    data: Ur<'a, Array>,
+    data: Cur<'a, Array>,
     rng: ThreadRng,
 }
 
 impl<'a> App<'a> {
     fn new() -> Self {
         Self {
-            data: UrBuilder::new().build(Array::new(10)),
+            data: CurBuilder::new().build(Array::new(10)),
             rng: rand::thread_rng(),
         }
     }
 
     fn reset(&mut self, size: usize) {
-        self.data = UrBuilder::new().build(Array::new(size))
+        self.data = CurBuilder::new().build(Array::new(size))
     }
 
     fn shuffle(&mut self) {
