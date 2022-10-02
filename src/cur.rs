@@ -1,28 +1,20 @@
 use crate::gur::{Gur, GurBuilder};
 use crate::metrics::Metrics;
-use crate::snapshot::{Snapshot, TraitSnapshot};
+use crate::snapshot::CloneSnapshot;
 
-/// A builder to create an [Ur].
+/// A builder to create an [Cur].
 ///
 #[derive(Default)]
-pub struct UrBuilder<'a, T, S>(GurBuilder<'a, T, S, TraitSnapshot<T, S>>)
-where
-    T: Snapshot<Snapshot = S>;
+pub struct CurBuilder<'a, T: Clone>(GurBuilder<'a, T, T, CloneSnapshot<T>>);
 
-impl<'a, T, S> UrBuilder<'a, T, S>
-where
-    T: Snapshot<Snapshot = S>,
-{
+impl<'a, T: Clone> CurBuilder<'a, T> {
     /// Create a new builder instance.
     pub fn new() -> Self {
         Self(GurBuilder::new())
     }
 }
 
-impl<'a, T, S> UrBuilder<'a, T, S>
-where
-    T: Snapshot<Snapshot = S>,
-{
+impl<'a, T: Clone> CurBuilder<'a, T> {
     /// Takes a closure to decide whether to save a snapshot of internal state.
     ///
     /// See [Snapshot trigger](crate::triggers#Snapshot&#32;trigger) for more details.
@@ -34,21 +26,21 @@ where
         self
     }
 
-    /// Create a new [Ur] object by the initial state of T.
-    pub fn build(self, initial_state: T) -> Ur<'a, T, S> {
-        Ur::new(self.0.build(initial_state))
+    /// Create a new [Cur] object by the initial state of T.
+    pub fn build(self, initial_state: T) -> Cur<'a, T> {
+        Cur::new(self.0.build(initial_state))
     }
 }
 
 /// A wrapper type to provide basic undo-redo functionality.
 ///
 /// # Generative approach
-/// A key idea of [Ur] is that "Undo is regenerating old state."
+/// A key idea of [Cur] is that "Undo is regenerating old state."
 ///
 /// For explanation, there is a sample history of changes (t0, t1, t2, and t3) as
 /// shown in the following figure.
 /// When undoing the latest state (t3) to the previous state (t2),
-/// [Ur] will back to the snapshot (s0) and restore the initial state (t0),
+/// [Cur] will back to the snapshot (s0) and restore the initial state (t0),
 /// then redo the actions (a1 and a2) in order until the target state (t2) is obtained.
 /// ```txt
 /// t: state
@@ -64,7 +56,7 @@ where
 /// ----+       undo t3 -> t2
 /// ```
 ///
-/// [Ur] manages object state and its history of changes.
+/// [Cur] manages object state and its history of changes.
 /// To implement the above undoing procedure,
 /// the history is stored as chain of actions instead of chain of states.
 ///
@@ -73,26 +65,21 @@ where
 /// For example, undoing may take too long time if the actions are heavy computational tasks.
 ///
 /// The problem can be mitigated by taking snapshots at appropriate intervals.
-/// [Ur] provides a way to control the behavior by trigger functions.
+/// [Cur] provides a way to control the behavior by trigger functions.
 /// See [Triggers](crate::triggers) about it.
 ///
 /// # Deref
-/// [Ur] implements [Deref](std::ops::Deref).
+/// [Cur] implements [Deref](std::ops::Deref).
 ///
 /// # Thread-safety
-/// [Ur] does not implement [Send] and [Sync].
-/// If you want a type [Ur] + [Send] + [Sync],
+/// [Cur] does not implement [Send] and [Sync].
+/// If you want a type [Cur] + [Send] + [Sync],
 /// [Aur](crate::aur::Aur) can be used.
 #[derive(Debug)]
-pub struct Ur<'a, T, S>(Gur<'a, T, S, TraitSnapshot<T, S>>)
-where
-    T: Snapshot<Snapshot = S>;
+pub struct Cur<'a, T: Clone>(Gur<'a, T, T, CloneSnapshot<T>>);
 
-impl<'a, T, S> Ur<'a, T, S>
-where
-    T: Snapshot<Snapshot = S>,
-{
-    pub(crate) fn new(inner: Gur<'a, T, S, TraitSnapshot<T, S>>) -> Self {
+impl<'a, T: Clone> Cur<'a, T> {
+    pub(crate) fn new(inner: Gur<'a, T, T, CloneSnapshot<T>>) -> Self {
         Self(inner)
     }
 
@@ -144,7 +131,7 @@ where
 
     /// Undo-redo bidirectionally.
     ///
-    /// This is integrated method of [undo_multi](Ur::undo_multi) and [redo_multi](Ur::redo_multi).
+    /// This is integrated method of [undo_multi](Cur::undo_multi) and [redo_multi](Cur::redo_multi).
     ///
     /// - `count < 0` => `self.undo_multi(-count)`.
     /// - `0 < count` => `self.redo_multi(count)`.
@@ -161,7 +148,7 @@ where
     ///
     /// # Remarks
     /// The closure MUST produce a same result for a same input.
-    /// If it is impossible, use [try_edit](Ur::try_edit).
+    /// If it is impossible, use [try_edit](Cur::try_edit).
     pub fn edit<F>(&mut self, command: F) -> &T
     where
         F: Fn(T) -> T + 'a,
@@ -179,7 +166,7 @@ where
     ///
     /// # Remarks
     /// The closure MUST produce a same result for a same input.
-    /// If it is impossible, use [try_edit](Ur::try_edit).
+    /// If it is impossible, use [try_edit](Cur::try_edit).
     pub fn edit_if<F>(&mut self, command: F) -> Option<&T>
     where
         F: Fn(T) -> Option<T> + 'a,
@@ -206,19 +193,13 @@ where
     }
 }
 
-impl<'a, T: std::fmt::Display, S> std::fmt::Display for Ur<'a, T, S>
-where
-    T: Snapshot<Snapshot = S>,
-{
+impl<'a, T: std::fmt::Display + Clone> std::fmt::Display for Cur<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.0.fmt(f)
     }
 }
 
-impl<'a, T, S> std::ops::Deref for Ur<'a, T, S>
-where
-    T: Snapshot<Snapshot = S>,
-{
+impl<'a, T: Clone> std::ops::Deref for Cur<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.0.deref()
@@ -228,21 +209,10 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::snapshot::Snapshot;
-
-    impl Snapshot for i32 {
-        type Snapshot = Self;
-        fn to_snapshot(&self) -> Self::Snapshot {
-            self.clone()
-        }
-        fn from_snapshot(snapshot: &i32) -> Self {
-            snapshot.clone()
-        }
-    }
 
     #[test]
     fn ok_add() {
-        let mut s = UrBuilder::default().build(0);
+        let mut s = CurBuilder::default().build(0);
 
         let t1 = s.try_edit(|n| Ok(n + 1)).unwrap();
         assert_eq!(1, *t1);
@@ -252,7 +222,7 @@ mod test {
         let err_add = |n| "NaN".parse::<i32>().map(|p| p + n).map_err(|e| e.into());
         let add_one = |n| n + 1;
 
-        let mut s = UrBuilder::default().build(0);
+        let mut s = CurBuilder::default().build(0);
 
         assert_eq!(0, *s);
 
@@ -270,7 +240,7 @@ mod test {
     }
     #[test]
     fn deref() {
-        let mut s = UrBuilder::default().build(0);
+        let mut s = CurBuilder::default().build(0);
 
         s.edit(|n| n + 1);
         assert_eq!(1, *s);
@@ -284,7 +254,7 @@ mod test {
 
     #[test]
     fn undo() {
-        let mut s = UrBuilder::default().build(0);
+        let mut s = CurBuilder::default().build(0);
 
         let t0 = *s;
         assert_eq!(0, t0);
@@ -320,7 +290,7 @@ mod test {
     fn undo_redo_many() {
         let n = 100000;
 
-        let mut s = UrBuilder::default()
+        let mut s = CurBuilder::default()
             // This trigger sometimes inserts snapshots to speed up undo()/redo().
             .snapshot_trigger(|metrics| 10 < metrics.distance_from_snapshot())
             .build(0);
@@ -343,7 +313,7 @@ mod test {
 
     #[test]
     fn redo() {
-        let mut s = UrBuilder::default().build(0);
+        let mut s = CurBuilder::default().build(0);
 
         let t0 = *s;
         assert_eq!(0, t0);
@@ -383,7 +353,7 @@ mod test {
 
     #[test]
     fn edit_undo_edit() {
-        let mut s = UrBuilder::default().build(0);
+        let mut s = CurBuilder::default().build(0);
 
         let t0 = *s;
         assert_eq!(0, t0);
@@ -401,7 +371,7 @@ mod test {
 
     #[test]
     fn edit_undo_edit_edit_undo_redo() {
-        let mut s = UrBuilder::default().build(0);
+        let mut s = CurBuilder::default().build(0);
 
         let t0 = *s;
         assert_eq!(0, t0);
@@ -427,7 +397,7 @@ mod test {
 
     #[test]
     fn jumpdo() {
-        let mut s = UrBuilder::default().build(0);
+        let mut s = CurBuilder::default().build(0);
 
         let t0 = *s; // 0
         let t1 = *s.edit(|n| n + 1); // 1
@@ -463,7 +433,7 @@ mod test {
 
     #[test]
     fn undo_multi() {
-        let mut s = UrBuilder::default().build(0);
+        let mut s = CurBuilder::default().build(0);
 
         let t0 = *s; // 0
         let _t1 = *s.edit(|n| n + 1); // 1
@@ -486,7 +456,7 @@ mod test {
 
     #[test]
     fn redo_multi() {
-        let mut s = UrBuilder::default().build(0);
+        let mut s = CurBuilder::default().build(0);
 
         let t0 = *s; // 0
         let t1 = *s.edit(|n| n + 1); // 1
@@ -513,7 +483,7 @@ mod test {
 
     #[test]
     fn edit_if() {
-        let mut s = UrBuilder::default().build(0);
+        let mut s = CurBuilder::default().build(0);
 
         let t0 = *s;
         assert_eq!(0, t0);

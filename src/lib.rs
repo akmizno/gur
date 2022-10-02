@@ -1,10 +1,10 @@
 //! Example
 //!
 //! ```rust
-//! use gur::ur::{UrBuilder, Ur};
+//! use gur::cur::{CurBuilder, Cur};
 //!
 //! fn main() {
-//!     let mut ur = UrBuilder::default().build(0 as i32);
+//!     let mut ur = CurBuilder::default().build(0 as i32);
 //!
 //!     ur.edit(|n| n + 1);
 //!     assert_eq!(1, *ur);
@@ -16,7 +16,10 @@
 //!     assert_eq!(1, *ur);
 //! }
 //! ```
+pub mod acur;
 pub mod aur;
+pub mod cur;
+pub mod gur;
 pub mod metrics;
 mod node;
 pub mod snapshot;

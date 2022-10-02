@@ -1,18 +1,12 @@
+use crate::cur::{Cur, CurBuilder};
 use crate::metrics::Metrics;
-use crate::snapshot::Snapshot;
-use crate::ur::{Ur, UrBuilder};
 
 #[derive(Default)]
-pub struct AurBuilder<'a, T, S>(UrBuilder<'a, T, S>)
-where
-    T: Snapshot<Snapshot = S>;
+pub struct AcurBuilder<'a, T: Clone>(CurBuilder<'a, T>);
 
-impl<'a, T, S> AurBuilder<'a, T, S>
-where
-    T: Snapshot<Snapshot = S>,
-{
+impl<'a, T: Clone> AcurBuilder<'a, T> {
     pub fn new() -> Self {
-        Self(UrBuilder::new())
+        Self(CurBuilder::new())
     }
 
     pub fn snapshot_trigger<F>(self, f: F) -> Self
@@ -22,21 +16,16 @@ where
         Self(self.0.snapshot_trigger(f))
     }
 
-    pub fn build(self, initial_state: T) -> Aur<'a, T, S> {
-        Aur::new(self.0.build(initial_state))
+    pub fn build(self, initial_state: T) -> Acur<'a, T> {
+        Acur::new(self.0.build(initial_state))
     }
 }
 
-/// Ur<T> + Send + Sync
-pub struct Aur<'a, T, S>(Ur<'a, T, S>)
-where
-    T: Snapshot<Snapshot = S>;
+/// Cur<T> + Send + Sync
+pub struct Acur<'a, T: Clone>(Cur<'a, T>);
 
-impl<'a, T, S> Aur<'a, T, S>
-where
-    T: Snapshot<Snapshot = S>,
-{
-    fn new(ur: Ur<'a, T, S>) -> Self {
+impl<'a, T: Clone> Acur<'a, T> {
+    fn new(ur: Cur<'a, T>) -> Self {
         Self(ur)
     }
     pub fn undo(&mut self) -> Option<&T> {
@@ -78,33 +67,24 @@ where
 }
 
 // NOTE
-// Implementing the Send and Sync for Aur<T> is safe,
-// since Aur<T> guarantees that all of command and trigger functions implement the traits.
-unsafe impl<'a, T: Send, S: Send> Send for Aur<'a, T, S> where T: Snapshot<Snapshot = S> {}
-unsafe impl<'a, T: Sync, S: Send> Sync for Aur<'a, T, S> where T: Snapshot<Snapshot = S> {}
+// Implementing the Send and Sync for Acur<T> is safe,
+// since Acur<T> guarantees that all of command and trigger functions implement the traits.
+unsafe impl<'a, T: Clone + Send> Send for Acur<'a, T> {}
+unsafe impl<'a, T: Clone + Sync> Sync for Acur<'a, T> {}
 
-impl<'a, T, S> std::fmt::Debug for Aur<'a, T, S>
-where
-    T: Snapshot<Snapshot = S> + std::fmt::Debug,
-{
+impl<'a, T: Clone + std::fmt::Debug> std::fmt::Debug for Acur<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.0.fmt(f)
     }
 }
 
-impl<'a, T, S> std::fmt::Display for Aur<'a, T, S>
-where
-    T: Snapshot<Snapshot = S> + std::fmt::Display,
-{
+impl<'a, T: Clone + std::fmt::Display> std::fmt::Display for Acur<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.0.fmt(f)
     }
 }
 
-impl<'a, T, S> std::ops::Deref for Aur<'a, T, S>
-where
-    T: Snapshot<Snapshot = S>,
-{
+impl<'a, T: Clone> std::ops::Deref for Acur<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.0.deref()

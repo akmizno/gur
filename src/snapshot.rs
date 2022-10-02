@@ -36,6 +36,6 @@ impl<T: Snapshot<Snapshot = S>, S> SnapshotHandler for TraitSnapshot<T, S> {
         state.to_snapshot()
     }
     fn from_snapshot(snapshot: &Self::Snapshot) -> Self::State {
-        Self::from_snapshot(snapshot)
+        Self::State::from_snapshot(snapshot)
     }
 }

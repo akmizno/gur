@@ -1,3 +1,4 @@
+use gur::snapshot::Snapshot;
 use gur::ur::{Ur, UrBuilder};
 use std::cmp;
 use std::fs::File;
@@ -5,10 +6,10 @@ use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct TextBuffer(Vec<char>);
 impl TextBuffer {
-    fn new<'a>(buffer: Vec<char>) -> Ur<'a, Self, Self> {
+    fn new<'a>(buffer: Vec<char>) -> Ur<'a, Self, String> {
         UrBuilder::default().build(TextBuffer(buffer))
     }
 
@@ -27,8 +28,18 @@ impl TextBuffer {
     }
 }
 
+impl Snapshot for TextBuffer {
+    type Snapshot = String;
+    fn to_snapshot(&self) -> Self::Snapshot {
+        self.0.iter().collect()
+    }
+    fn from_snapshot(snapshot: &Self::Snapshot) -> Self {
+        Self(snapshot.chars().collect())
+    }
+}
+
 struct TextEditor<'a> {
-    buffer: Ur<'a, TextBuffer, TextBuffer>,
+    buffer: Ur<'a, TextBuffer, String>,
     cursor: usize,
     file: Option<PathBuf>,
 }
