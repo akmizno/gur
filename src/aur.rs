@@ -79,9 +79,9 @@ where
 
 // NOTE
 // Implementing the Send and Sync for Aur<T> is safe,
-// since Aur<T> guarantees that all of command and trigger functions implement the traits.
+// since Aur<T> guarantees that all of stored commands and triggers implement the traits.
 unsafe impl<'a, T: Send, S: Send> Send for Aur<'a, T, S> where T: Snapshot<Snapshot = S> {}
-unsafe impl<'a, T: Sync, S: Send> Sync for Aur<'a, T, S> where T: Snapshot<Snapshot = S> {}
+unsafe impl<'a, T: Sync, S: Sync> Sync for Aur<'a, T, S> where T: Snapshot<Snapshot = S> {}
 
 impl<'a, T, S> std::fmt::Debug for Aur<'a, T, S>
 where

@@ -68,7 +68,7 @@ impl<'a, T: Clone> Acur<'a, T> {
 
 // NOTE
 // Implementing the Send and Sync for Acur<T> is safe,
-// since Acur<T> guarantees that all of command and trigger functions implement the traits.
+// since Acur<T> guarantees that all of stored commands and triggers implement the traits.
 unsafe impl<'a, T: Clone + Send> Send for Acur<'a, T> {}
 unsafe impl<'a, T: Clone + Sync> Sync for Acur<'a, T> {}
 
