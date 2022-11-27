@@ -3,7 +3,6 @@ use crate::metrics::Metrics;
 use crate::snapshot::{Snapshot, TraitSnapshot};
 
 /// A builder to create an [Ur].
-///
 #[derive(Default)]
 pub struct UrBuilder<'a, T, S>(GurBuilder<'a, T, S, TraitSnapshot<T, S>>)
 where
@@ -13,7 +12,7 @@ impl<'a, T, S> UrBuilder<'a, T, S>
 where
     T: Snapshot<Snapshot = S>,
 {
-    /// Create a new builder instance.
+    /// Creates a new builder instance.
     pub fn new() -> Self {
         Self(GurBuilder::new())
     }
@@ -23,8 +22,7 @@ impl<'a, T, S> UrBuilder<'a, T, S>
 where
     T: Snapshot<Snapshot = S>,
 {
-    /// Takes a closure to decide whether to save a snapshot of internal state.
-    ///
+    /// Takes a closure to decide whether to take a snapshot of internal state.
     /// See [Snapshot trigger](crate::triggers#Snapshot&#32;trigger) for more details.
     pub fn snapshot_trigger<F>(mut self, f: F) -> Self
     where
@@ -34,55 +32,71 @@ where
         self
     }
 
-    /// Create a new [Ur] object by the initial state of T.
+    /// Creates a new [Ur] object with an initial state of T.
     pub fn build(self, initial_state: T) -> Ur<'a, T, S> {
         Ur::new(self.0.build(initial_state))
     }
 }
 
-/// A wrapper type to provide basic undo-redo functionality.
+/// A wrapper type providing basic undo-redo functionality.
 ///
-/// # Generative approach
-/// A key idea of [Ur] is that "Undo is regenerating old state."
-///
-/// For explanation, there is a sample history of changes (t0, t1, t2, and t3) as
-/// shown in the following figure.
-/// When undoing the latest state (t3) to the previous state (t2),
-/// [Ur] will back to the snapshot (s0) and restore the initial state (t0),
-/// then redo the actions (a1 and a2) in order until the target state (t2) is obtained.
-/// ```txt
-/// t: state
-/// a: action
-/// s: snapshot
-///
-/// +---+ a1 +---+ a2 +---+ a3 +---+
-/// |t0 |--->|t1 |--->|t2 |--->|t3 |
-/// +---+    +---+    +---+    +---+
-///   |    +--------->           |
-/// +---+  |                     |
-/// |s0 |  +---------------------+
-/// ----+       undo t3 -> t2
+/// # Sample code
 /// ```
+/// use gur::ur::{Ur, UrBuilder};
+/// use gur::snapshot::Snapshot;
 ///
-/// [Ur] manages object state and its history of changes.
-/// To implement the above undoing procedure,
-/// the history is stored as chain of actions instead of chain of states.
+/// // Appication state
+/// struct MyState {
+///     data: String
+/// }
 ///
-/// # Performance customization
-/// There is a performance problem with this generative approach.
-/// For example, undoing may take too long time if the actions are heavy computational tasks.
+/// // Implementing Snapshot trait
+/// impl Snapshot for MyState {
+///     type Snapshot = String;
+///     fn to_snapshot(&self) -> Self::Snapshot {
+///         self.data.clone()
+///     }
+///     fn from_snapshot(snapshot: &Self::Snapshot) -> Self {
+///         MyState{ data: snapshot.clone() }
+///     }
+/// }
 ///
-/// The problem can be mitigated by taking snapshots at appropriate intervals.
-/// [Ur] provides a way to control the behavior by trigger functions.
-/// See [Triggers](crate::triggers) about it.
+/// fn main() {
+///     // Initialize
+///     let mut state = UrBuilder::new().build(MyState{ data: "My".to_string() });
+///     assert_eq!("My", state.data);
 ///
-/// # Deref
+///     // Change state
+///     state.edit(|state| MyState{ data: state.data + "State" });
+///     assert_eq!("MyState", state.data);
+///
+///     // Undo
+///     state.undo();
+///     assert_eq!("My", state.data);
+///
+///     // Redo
+///     state.redo();
+///     assert_eq!("MyState", state.data);
+/// }
+/// ```
+/// See also [UrBuilder] and [Snapshot](crate::snapshot::Snapshot).
+///
+/// # Information
+/// ## Snapshot trait
+/// [Ur] requires a type `T` implementing [Snapshot](crate::snapshot::Snapshot).
+/// The trait specifies conversion between `T` and its snapshot object.
+///
+/// [Cur](crate::cur::Cur) may be more suitable for simple types.
+/// It requires [Clone] instead of [Snapshot](crate::snapshot::Snapshot).
+/// See [Cur](crate::cur::Cur) for more detail.
+///
+/// ## Deref
 /// [Ur] implements [Deref](std::ops::Deref).
 ///
-/// # Thread-safety
+/// ## Thread-safety
 /// [Ur] does not implement [Send] and [Sync].
 /// If you want a type [Ur] + [Send] + [Sync],
-/// [Aur](crate::aur::Aur) can be used.
+/// use [Aur](crate::aur::Aur).
 #[derive(Debug)]
 pub struct Ur<'a, T, S>(Gur<'a, T, S, TraitSnapshot<T, S>>)
 where
@@ -96,19 +110,17 @@ where
         Self(inner)
     }
 
-    /// Restore the previous state.
-    ///
+    /// Restores the previous state.
     /// Same as `self.undo_multi(1)`.
     ///
     /// # Return
-    /// [None] is returned if there is no older version in the history,
+    /// [None] is returned if no older version exists in the history,
     /// otherwise immutable reference to the updated internal state.
     pub fn undo(&mut self) -> Option<&T> {
         self.0.undo()
     }
 
     /// Undo multiple steps.
-    ///
     /// This method is more efficient than running `self.undo()` multiple times.
     ///
     /// # Return
@@ -119,19 +131,17 @@ where
         self.0.undo_multi(count)
     }
 
-    /// Restore the next state.
-    ///
+    /// Restores the next state.
     /// Same as `self.redo_multi(1)`.
     ///
     /// # Return
-    /// [None] is returned if there is no newer version in the history,
+    /// [None] is returned if no newer version exists in the history,
     /// otherwise immutable reference to the updated internal state.
     pub fn redo(&mut self) -> Option<&T> {
         self.0.redo()
     }
 
     /// Redo multiple steps.
-    ///
     /// This method is more efficient than running `self.redo()` multiple times.
     ///
     /// # Return
@@ -143,7 +153,6 @@ where
     }
 
     /// Undo-redo bidirectionally.
-    ///
     /// This is integrated method of [undo_multi](Ur::undo_multi) and [redo_multi](Ur::redo_multi).
     ///
     /// - `count < 0` => `self.undo_multi(-count)`.
@@ -153,7 +162,6 @@ where
     }
 
     /// Takes a closure and update the internal state.
-    ///
     /// The closure consumes the current state and produces a new state.
     ///
     /// # Return
@@ -170,7 +178,6 @@ where
     }
 
     /// Takes a closure and update the internal state.
-    ///
     /// The closure consumes the current state and produces a new state or [None].
     /// If the closure returns [None], the internal state is not changed.
     ///
@@ -188,7 +195,6 @@ where
     }
 
     /// Takes a closure and update the internal state.
-    ///
     /// The closure consumes the current state and produces a new state or an error.
     /// If the closure returns an error, the internal state is not changed.
     ///
@@ -196,8 +202,17 @@ where
     /// Immutable reference to the new state or an error produced by the closure.
     ///
     /// # Remark
-    /// In this method, the produced state from the closure is stored as a snapshot always;
-    /// because the type of closure is [FnOnce], same output can not be reproducible never again.
+    /// Unlike [edit](Ur::edit) and [edit_if](Ur::edit_if),
+    /// this method accepts closures that can never reproduce same output again.
+    /// After changing the internal state by the closure, a snapshot is taken for undoability.
+    ///
+    /// Generally, closures including following functions should use this method:
+    ///
+    /// - I/O
+    /// - IPC
+    /// - random
+    ///
+    /// etc.
     pub fn try_edit<F>(&mut self, command: F) -> Result<&T, Box<dyn std::error::Error>>
     where
         F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,

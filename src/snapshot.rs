@@ -1,10 +1,26 @@
 use std::marker::PhantomData;
+
+/// A trait for ability to convert between an object and its snapshot.
+///
+/// [Ur](crate::ur::Ur) and [Aur](crate::aur::Aur) requires types implementing this trait.
 pub trait Snapshot {
+    /// Type of snapshot.
     type Snapshot;
+    /// Create a snapshot object.
     fn to_snapshot(&self) -> Self::Snapshot;
+    /// Restore from a snapshot.
     fn from_snapshot(snapshot: &Self::Snapshot) -> Self;
 }
 
+/// Internal snapshot handler.
+///
+///```txt
+///          to_snapshot
+///       ---------------->
+/// State  SnapshotHandler  Snapshot
+///       <----------------
+///         from_snapshot
+///```
 pub(crate) trait SnapshotHandler {
     type State;
     type Snapshot;
@@ -12,6 +28,7 @@ pub(crate) trait SnapshotHandler {
     fn from_snapshot(snapshot: &Self::Snapshot) -> Self::State;
 }
 
+/// Snapshot handler for [Clone] implementors.
 #[derive(Clone, Debug)]
 pub(crate) struct CloneSnapshot<T>(PhantomData<T>);
 
@@ -26,6 +43,7 @@ impl<T: Clone> SnapshotHandler for CloneSnapshot<T> {
     }
 }
 
+/// Snapshot handler for [Snapshot] implementors.
 #[derive(Clone, Debug)]
 pub(crate) struct TraitSnapshot<T: Snapshot<Snapshot = S>, S>(PhantomData<T>);
 

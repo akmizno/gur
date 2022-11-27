@@ -3,7 +3,6 @@ use crate::metrics::Metrics;
 use crate::snapshot::CloneSnapshot;
 
 /// A builder to create an [Cur].
-///
 #[derive(Default)]
 pub struct CurBuilder<'a, T: Clone>(GurBuilder<'a, T, T, CloneSnapshot<T>>);
 
@@ -15,8 +14,7 @@ impl<'a, T: Clone> CurBuilder<'a, T> {
 }
 
 impl<'a, T: Clone> CurBuilder<'a, T> {
-    /// Takes a closure to decide whether to save a snapshot of internal state.
-    ///
+    /// Takes a closure to decide whether to take a snapshot of internal state.
     /// See [Snapshot trigger](crate::triggers#Snapshot&#32;trigger) for more details.
     pub fn snapshot_trigger<F>(mut self, f: F) -> Self
     where
@@ -26,55 +24,57 @@ impl<'a, T: Clone> CurBuilder<'a, T> {
         self
     }
 
-    /// Create a new [Cur] object by the initial state of T.
+    /// Creates a new [Cur] object with an initial state of T.
     pub fn build(self, initial_state: T) -> Cur<'a, T> {
         Cur::new(self.0.build(initial_state))
     }
 }
 
-/// A wrapper type to provide basic undo-redo functionality.
+/// A wrapper type providing basic undo-redo functionality for [Clone] implementors.
 ///
-/// # Generative approach
-/// A key idea of [Cur] is that "Undo is regenerating old state."
-///
-/// For explanation, there is a sample history of changes (t0, t1, t2, and t3) as
-/// shown in the following figure.
-/// When undoing the latest state (t3) to the previous state (t2),
-/// [Cur] will back to the snapshot (s0) and restore the initial state (t0),
-/// then redo the actions (a1 and a2) in order until the target state (t2) is obtained.
-/// ```txt
-/// t: state
-/// a: action
-/// s: snapshot
-///
-/// +---+ a1 +---+ a2 +---+ a3 +---+
-/// |t0 |--->|t1 |--->|t2 |--->|t3 |
-/// +---+    +---+    +---+    +---+
-///   |    +--------->           |
-/// +---+  |                     |
-/// |s0 |  +---------------------+
-/// ----+       undo t3 -> t2
+/// # Sample code
 /// ```
+/// use gur::cur::{Cur, CurBuilder};
 ///
-/// [Cur] manages object state and its history of changes.
-/// To implement the above undoing procedure,
-/// the history is stored as chain of actions instead of chain of states.
+/// // Appication state
+/// #[derive(Clone)]
+/// struct MyState {
+///     data: String
+/// }
 ///
-/// # Performance customization
-/// There is a performance problem with this generative approach.
-/// For example, undoing may take too long time if the actions are heavy computational tasks.
+/// fn main() {
+///     // Initialize
+///     let mut state = CurBuilder::new().build(MyState{ data: "My".to_string() });
+///     assert_eq!("My", state.data);
 ///
-/// The problem can be mitigated by taking snapshots at appropriate intervals.
-/// [Cur] provides a way to control the behavior by trigger functions.
-/// See [Triggers](crate::triggers) about it.
+///     // Change state
+///     state.edit(|state| MyState{ data: state.data + "State" });
+///     assert_eq!("MyState", state.data);
 ///
-/// # Deref
+///     // Undo
+///     state.undo();
+///     assert_eq!("My", state.data);
+///
+///     // Redo
+///     state.redo();
+///     assert_eq!("MyState", state.data);
+/// }
+/// ```
+/// See also [CurBuilder].
+///
+/// # Information
+/// ## Snapshot by Clone
+/// Unlike [Ur](crate::ur::Ur), [Cur] takes snapshots by [Clone].
+/// So [Cur] requires a type `T` implementing [Clone] instead of
+/// [Snapshot](crate::snapshot::Snapshot).
+///
+/// ## Deref
 /// [Cur] implements [Deref](std::ops::Deref).
 ///
-/// # Thread-safety
+/// ## Thread-safety
 /// [Cur] does not implement [Send] and [Sync].
 /// If you want a type [Cur] + [Send] + [Sync],
-/// [Aur](crate::aur::Aur) can be used.
+/// use [Acur](crate::acur::Acur).
 #[derive(Debug)]
 pub struct Cur<'a, T: Clone>(Gur<'a, T, T, CloneSnapshot<T>>);
 
@@ -83,19 +83,17 @@ impl<'a, T: Clone> Cur<'a, T> {
         Self(inner)
     }
 
-    /// Restore the previous state.
-    ///
+    /// Restores the previous state.
     /// Same as `self.undo_multi(1)`.
     ///
     /// # Return
-    /// [None] is returned if there is no older version in the history,
+    /// [None] is returned if no older version exists in the history,
     /// otherwise immutable reference to the updated internal state.
     pub fn undo(&mut self) -> Option<&T> {
         self.0.undo()
     }
 
     /// Undo multiple steps.
-    ///
     /// This method is more efficient than running `self.undo()` multiple times.
     ///
     /// # Return
@@ -106,19 +104,17 @@ impl<'a, T: Clone> Cur<'a, T> {
         self.0.undo_multi(count)
     }
 
-    /// Restore the next state.
-    ///
+    /// Restores the next state.
     /// Same as `self.redo_multi(1)`.
     ///
     /// # Return
-    /// [None] is returned if there is no newer version in the history,
+    /// [None] is returned if no newer version exists in the history,
     /// otherwise immutable reference to the updated internal state.
     pub fn redo(&mut self) -> Option<&T> {
         self.0.redo()
     }
 
     /// Redo multiple steps.
-    ///
     /// This method is more efficient than running `self.redo()` multiple times.
     ///
     /// # Return
@@ -130,7 +126,6 @@ impl<'a, T: Clone> Cur<'a, T> {
     }
 
     /// Undo-redo bidirectionally.
-    ///
     /// This is integrated method of [undo_multi](Cur::undo_multi) and [redo_multi](Cur::redo_multi).
     ///
     /// - `count < 0` => `self.undo_multi(-count)`.
@@ -140,7 +135,6 @@ impl<'a, T: Clone> Cur<'a, T> {
     }
 
     /// Takes a closure and update the internal state.
-    ///
     /// The closure consumes the current state and produces a new state.
     ///
     /// # Return
@@ -157,7 +151,6 @@ impl<'a, T: Clone> Cur<'a, T> {
     }
 
     /// Takes a closure and update the internal state.
-    ///
     /// The closure consumes the current state and produces a new state or [None].
     /// If the closure returns [None], the internal state is not changed.
     ///
@@ -175,7 +168,6 @@ impl<'a, T: Clone> Cur<'a, T> {
     }
 
     /// Takes a closure and update the internal state.
-    ///
     /// The closure consumes the current state and produces a new state or an error.
     /// If the closure returns an error, the internal state is not changed.
     ///
@@ -183,8 +175,17 @@ impl<'a, T: Clone> Cur<'a, T> {
     /// Immutable reference to the new state or an error produced by the closure.
     ///
     /// # Remark
-    /// In this method, the produced state from the closure is stored as a snapshot always;
-    /// because the type of closure is [FnOnce], same output can not be reproducible never again.
+    /// Unlike [edit](Cur::edit) and [edit_if](Cur::edit_if),
+    /// this method accepts closures that can never reproduce same output again.
+    /// After changing the internal state by the closure, a snapshot is taken for undoability.
+    ///
+    /// Generally, closures including following functions should use this method:
+    ///
+    /// - I/O
+    /// - IPC
+    /// - random
+    ///
+    /// etc.
     pub fn try_edit<F>(&mut self, command: F) -> Result<&T, Box<dyn std::error::Error>>
     where
         F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,

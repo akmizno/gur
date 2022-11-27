@@ -16,7 +16,6 @@ impl<'a, T, S, H> GurBuilder<'a, T, S, H>
 where
     H: SnapshotHandler<State = T, Snapshot = S>,
 {
-    /// Create a new builder instance.
     pub(crate) fn new() -> Self {
         Self {
             snapshot_trigger: None,
@@ -24,9 +23,6 @@ where
         }
     }
 
-    /// Takes a closure to decide whether to save a snapshot of internal state.
-    ///
-    /// See [Snapshot trigger](crate::triggers#Snapshot&#32;trigger) for more details.
     pub(crate) fn snapshot_trigger<F>(mut self, f: F) -> Self
     where
         F: FnMut(&Metrics) -> bool + 'a,
@@ -35,7 +31,6 @@ where
         self
     }
 
-    /// Create a new [Gur] object by the initial state of T.
     pub(crate) fn build(self, initial_state: T) -> Gur<'a, T, S, H> {
         Gur::new(
             initial_state,
@@ -56,10 +51,6 @@ pub(crate) struct Gur<'a, T, S, H>
 where
     H: SnapshotHandler<State = T, Snapshot = S>,
 {
-    // Some means that the current state is owned by itself.
-    // None means that the current state is not owned by this variable.
-    // In this case, the self.history[self.current] should be accessed as a snapshot node and
-    // it is used as a current state.
     state: Option<T>,
 
     history: Vec<Node<'a, T, S>>,
@@ -111,60 +102,24 @@ where
         }
     }
 
-    /// Restore the previous state.
-    ///
-    /// Same as `self.undo_multi(1)`.
-    ///
-    /// # Return
-    /// [None] is returned if there is no older version in the history,
-    /// otherwise immutable reference to the updated internal state.
     pub(crate) fn undo(&mut self) -> Option<&T> {
         self.undo_multi(1)
     }
 
-    /// Undo multiple steps.
-    ///
-    /// This method is more efficient than running `self.undo()` multiple times.
-    ///
-    /// # Return
-    /// [None] is returned if the target version is out of the history,
-    /// otherwise immutable reference to the updated internal state.
-    /// If `count=0`, this method does nothing and returns reference to the current state.
     pub(crate) fn undo_multi(&mut self, count: usize) -> Option<&T> {
         debug_assert!(count < isize::MAX as usize);
         self.jumpdo(-(count as isize))
     }
 
-    /// Restore the next state.
-    ///
-    /// Same as `self.redo_multi(1)`.
-    ///
-    /// # Return
-    /// [None] is returned if there is no newer version in the history,
-    /// otherwise immutable reference to the updated internal state.
     pub(crate) fn redo(&mut self) -> Option<&T> {
         self.redo_multi(1)
     }
 
-    /// Redo multiple steps.
-    ///
-    /// This method is more efficient than running `self.redo()` multiple times.
-    ///
-    /// # Return
-    /// [None] is returned if the target version is out of the history,
-    /// otherwise immutable reference to the updated internal state.
-    /// If `count=0`, this method does nothing and returns reference to the current state.
     pub(crate) fn redo_multi(&mut self, count: usize) -> Option<&T> {
         debug_assert!(count < isize::MAX as usize);
         self.jumpdo(count as isize)
     }
 
-    /// Undo-redo bidirectionally.
-    ///
-    /// This is integrated method of [undo_multi](Gur::undo_multi) and [redo_multi](Gur::redo_multi).
-    ///
-    /// - `count < 0` => `self.undo_multi(-count)`.
-    /// - `0 < count` => `self.redo_multi(count)`.
     pub(crate) fn jumpdo(&mut self, count: isize) -> Option<&T> {
         if 0 == count {
             // Nothing to do
@@ -253,16 +208,6 @@ where
         self.current = target;
     }
 
-    /// Takes a closure and update the internal state.
-    ///
-    /// The closure consumes the current state and produces a new state.
-    ///
-    /// # Return
-    /// Immutable reference to the new state.
-    ///
-    /// # Remarks
-    /// The closure MUST produce a same result for a same input.
-    /// If it is impossible, use [try_edit](Gur::try_edit).
     pub(crate) fn edit<F>(&mut self, command: F) -> &T
     where
         F: Fn(T) -> T + 'a,
@@ -272,17 +217,6 @@ where
         unsafe { self.edit_if(move |s| Some(command(s))).unwrap_unchecked() }
     }
 
-    /// Takes a closure and update the internal state.
-    ///
-    /// The closure consumes the current state and produces a new state or [None].
-    /// If the closure returns [None], the internal state is not changed.
-    ///
-    /// # Return
-    /// Immutable reference to the new state or [None].
-    ///
-    /// # Remarks
-    /// The closure MUST produce a same result for a same input.
-    /// If it is impossible, use [try_edit](Gur::try_edit).
     pub(crate) fn edit_if<F>(&mut self, command: F) -> Option<&T>
     where
         F: Fn(T) -> Option<T> + 'a,
@@ -334,17 +268,6 @@ where
         }
     }
 
-    /// Takes a closure and update the internal state.
-    ///
-    /// The closure consumes the current state and produces a new state or an error.
-    /// If the closure returns an error, the internal state is not changed.
-    ///
-    /// # Return
-    /// Immutable reference to the new state or an error produced by the closure.
-    ///
-    /// # Remark
-    /// In this method, the produced state from the closure is stored as a snapshot always;
-    /// because the type of closure is [FnOnce], same output can not be reproducible never again.
     pub(crate) fn try_edit<F>(&mut self, command: F) -> Result<&T, Box<dyn std::error::Error>>
     where
         F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,
