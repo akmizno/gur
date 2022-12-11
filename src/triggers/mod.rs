@@ -42,3 +42,6 @@
 //! The total computation time between two snapshots (e.g. c1 + c2 + ... + cm) is limited within
 //! 500 ms.
 //! Therefore, any undo processes is expected that it is completed within 500 ms.
+//!
+//! Some predefined triggers are found in [snapshot_trigger].
+pub mod snapshot_trigger;
