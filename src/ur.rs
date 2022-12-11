@@ -23,6 +23,11 @@ where
     T: Snapshot<Snapshot = S>,
 {
     /// Takes a closure to decide whether to take a snapshot of internal state.
+    ///
+    /// # Remarks
+    /// [snapshot_never](crate::triggers::snapshot_trigger::snapshot_never) are used as a default
+    /// trigger.
+    /// Note that it may cause performance problem.
     /// See [Snapshot trigger](crate::triggers#Snapshot&#32;trigger) for more details.
     pub fn snapshot_trigger<F>(mut self, f: F) -> Self
     where

@@ -1,6 +1,7 @@
 use crate::metrics::Metrics;
 use crate::node::Node;
 use crate::snapshot::SnapshotHandler;
+use crate::triggers::snapshot_trigger::snapshot_never;
 use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
@@ -34,7 +35,7 @@ where
     pub(crate) fn build(self, initial_state: T) -> Gur<'a, T, S, H> {
         Gur::new(
             initial_state,
-            self.snapshot_trigger.unwrap_or(Box::new(|_m| false)),
+            self.snapshot_trigger.unwrap_or(Box::new(snapshot_never())),
         )
     }
 }
