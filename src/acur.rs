@@ -28,6 +28,9 @@ impl<'a, T: Clone> Acur<'a, T> {
     fn new(ur: Cur<'a, T>) -> Self {
         Self(ur)
     }
+    pub fn into_inner(self) -> T {
+        self.0.into_inner()
+    }
     pub fn undo(&mut self) -> Option<&T> {
         self.0.undo()
     }

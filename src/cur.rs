@@ -88,6 +88,11 @@ impl<'a, T: Clone> Cur<'a, T> {
         Self(inner)
     }
 
+    /// Returns the current state object, consuming the self.
+    pub fn into_inner(self) -> T {
+        self.0.into_inner()
+    }
+
     /// Restores the previous state.
     /// Same as `self.undo_multi(1)`.
     ///
@@ -500,5 +505,18 @@ mod test {
         let t_none = s.edit_if(|_| None);
         assert!(t_none.is_none());
         assert_eq!(1, *s);
+    }
+
+    #[test]
+    fn into_inner() {
+        let mut s = CurBuilder::default().build(0);
+
+        let t0 = *s;
+        assert_eq!(0, t0);
+
+        s.edit_if(|n| Some(n + 1)).unwrap();
+        assert_eq!(1, *s);
+
+        assert_eq!(1, s.into_inner());
     }
 }

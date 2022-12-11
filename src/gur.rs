@@ -89,6 +89,10 @@ where
         unsafe { self.state.take().unwrap_unchecked() }
     }
 
+    pub(crate) fn into_inner(mut self) -> T {
+        self.take()
+    }
+
     pub(crate) fn new(
         initial_state: T,
         snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
