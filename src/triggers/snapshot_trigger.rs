@@ -75,7 +75,7 @@ pub fn snapshot_always() -> impl Fn(&Metrics) -> bool {
 /// The created closure returns false everytime.
 /// By using this trigger, snapshots will never been taken for each [Ur::edit](crate::ur::Ur::edit).
 ///
-/// # Note
+/// # Remarks
 /// Even if you use this trigger, [Ur::try_edit](crate::ur::Ur::try_edit) takes snapshots.
 ///
 /// # Usage
