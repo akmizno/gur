@@ -21,7 +21,7 @@ impl<'a, T: Clone> AcurBuilder<'a, T> {
     }
 }
 
-/// Cur<T> + Send + Sync
+/// [Cur](crate::cur::Cur) + [Send] + [Sync]
 pub struct Acur<'a, T: Clone>(Cur<'a, T>);
 
 impl<'a, T: Clone> Acur<'a, T> {

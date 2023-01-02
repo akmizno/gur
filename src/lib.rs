@@ -5,8 +5,8 @@
 //!
 //! - [Ur](crate::ur::Ur): A basic wrapper for types implementing [Snapshot](crate::snapshot::Snapshot).
 //! - [Cur](crate::cur::Cur): Another simple wrapper for types implementing [Clone].
-//! - [Aur](crate::aur::Aur): [Ur](crate::ur::Ur) + Send + Sync.
-//! - [Acur](crate::acur::Acur): [Cur](crate::cur::Cur) + Send + Sync.
+//! - [Aur](crate::aur::Aur): [Ur](crate::ur::Ur) + [Send] + [Sync].
+//! - [Acur](crate::acur::Acur): [Cur](crate::cur::Cur) + [Send] + [Sync].
 //!
 //! # Generative approach
 //! A policy of this crate is that "Undo is regenerating (recomputing) the old state."

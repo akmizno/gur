@@ -27,7 +27,7 @@ where
     }
 }
 
-/// Ur<T> + Send + Sync
+/// [Ur](crate::ur::Ur) + [Send] + [Sync]
 pub struct Aur<'a, T, S>(Ur<'a, T, S>)
 where
     T: Snapshot<Snapshot = S>;
