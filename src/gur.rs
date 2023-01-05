@@ -175,8 +175,8 @@ where
     fn undo_impl(&mut self, count: usize) {
         debug_assert!(0 < count);
         debug_assert!(count <= self.current());
-        let target_idx = dbg!(self.current() - count);
-        let last_snapshot_idx = dbg!(self.history.find_last_snapshot_index(target_idx));
+        let target_idx = self.current() - count;
+        let last_snapshot_idx = self.history.find_last_snapshot_index(target_idx);
 
         let (mut state, begin, cmd_count) = {
             let _ = self.take(); // drop the current state before a first state restored.
