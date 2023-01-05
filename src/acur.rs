@@ -1,12 +1,13 @@
-use crate::cur::{Cur, CurBuilder};
+use crate::agur::{Agur, AgurBuilder};
 use crate::metrics::Metrics;
+use crate::snapshot::CloneSnapshot;
 
 #[derive(Default)]
-pub struct AcurBuilder<'a, T: Clone>(CurBuilder<'a, T>);
+pub struct AcurBuilder<'a, T: Clone>(AgurBuilder<'a, T, T, CloneSnapshot<T>>);
 
 impl<'a, T: Clone> AcurBuilder<'a, T> {
     pub fn new() -> Self {
-        Self(CurBuilder::new())
+        Self(AgurBuilder::new())
     }
 
     pub fn snapshot_trigger<F>(self, f: F) -> Self
@@ -22,10 +23,11 @@ impl<'a, T: Clone> AcurBuilder<'a, T> {
 }
 
 /// [Cur](crate::cur::Cur) + [Send] + [Sync]
-pub struct Acur<'a, T: Clone>(Cur<'a, T>);
+#[derive(Debug)]
+pub struct Acur<'a, T: Clone>(Agur<'a, T, T, CloneSnapshot<T>>);
 
 impl<'a, T: Clone> Acur<'a, T> {
-    fn new(ur: Cur<'a, T>) -> Self {
+    fn new(ur: Agur<'a, T, T, CloneSnapshot<T>>) -> Self {
         Self(ur)
     }
     pub fn into_inner(self) -> T {
@@ -66,18 +68,6 @@ impl<'a, T: Clone> Acur<'a, T> {
         F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,
     {
         self.0.try_edit(command)
-    }
-}
-
-// NOTE
-// Implementing the Send and Sync for Acur<T> is safe,
-// since Acur<T> guarantees that all of stored commands and triggers implement the traits.
-unsafe impl<'a, T: Clone + Send> Send for Acur<'a, T> {}
-unsafe impl<'a, T: Clone + Sync> Sync for Acur<'a, T> {}
-
-impl<'a, T: Clone + std::fmt::Debug> std::fmt::Debug for Acur<'a, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        self.0.fmt(f)
     }
 }
 

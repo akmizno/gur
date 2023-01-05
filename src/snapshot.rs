@@ -29,7 +29,7 @@ pub(crate) trait SnapshotHandler {
 }
 
 /// Snapshot handler for [Clone] implementors.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct CloneSnapshot<T>(PhantomData<T>);
 
 impl<T: Clone> SnapshotHandler for CloneSnapshot<T> {
@@ -44,7 +44,7 @@ impl<T: Clone> SnapshotHandler for CloneSnapshot<T> {
 }
 
 /// Snapshot handler for [Snapshot] implementors.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct TraitSnapshot<T: Snapshot<Snapshot = S>, S>(PhantomData<T>);
 
 impl<T: Snapshot<Snapshot = S>, S> SnapshotHandler for TraitSnapshot<T, S> {

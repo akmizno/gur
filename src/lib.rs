@@ -53,6 +53,7 @@
 //! ```
 //! The frequency of snapshots can be customized by "trigger functions."
 //! See [crate::triggers] for more details.
+mod agur;
 mod gur;
 mod history;
 
