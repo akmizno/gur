@@ -19,15 +19,15 @@
 //! use gur::metrics::Metrics;
 //! use std::time::Duration;
 //!
-//! fn Snapshot500ms(metrics: &Metrics) -> bool {
+//! fn snapshot_500ms(metrics: &Metrics) -> bool {
 //!     Duration::from_millis(500) < metrics.elapsed_from_snapshot()
 //! }
 //!
 //! fn main() {
-//!     let mut ur = CurBuilder::new().snapshot_trigger(Snapshot500ms).build(0);
+//!     let mut ur = CurBuilder::new().snapshot_trigger(snapshot_500ms).build(0);
 //! }
 //! ```
-//! In this example, the function "Snapshot500ms" returns true when total computation time
+//! In this example, the function "snapshot_500ms" returns true when total computation time
 //! of commands from last snapshot exceeds 500 ms.
 //! So the internal history chain will become like following,
 //! ```txt
