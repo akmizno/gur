@@ -4,7 +4,7 @@
 //! The generative approach described [here](crate#Generative&#32;approach) may cause performance problem.
 //! For example, undoing may take too long time if the commands are heavy computational tasks.
 //!
-//! The problem can be mitigated by taking snapshots more frequently.
+//! The problem can be mitigated by taking snapshots frequently.
 //! [UrBuilder](crate::ur::UrBuilder) provides a way to control the frequency.
 //! That is "snapshot triggers."
 //!
@@ -13,7 +13,7 @@
 //! When the trigger returns true,
 //! a snapshot is created from the state and is stored in the history instead of the command.
 //!
-//! A simple solution is based on elapsed time of changes.
+//! Here is a simple example; a trigger based on elapsed time of changes.
 //! ```rust
 //! use gur::cur::{Cur, CurBuilder};
 //! use gur::metrics::Metrics;
@@ -41,7 +41,7 @@
 //! ```
 //! The total computation time between two snapshots (e.g. c1 + c2 + ... + cm) is limited within
 //! 500 ms.
-//! Therefore, any undo processes is expected that it is completed within 500 ms.
+//! Therefore, it is expected that any undo processes is completed within 500 ms.
 //!
 //! Some predefined triggers are found in [snapshot_trigger].
 pub mod snapshot_trigger;

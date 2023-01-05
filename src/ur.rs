@@ -84,7 +84,12 @@ where
 ///     assert_eq!("MyState", state.data);
 /// }
 /// ```
-/// See also [UrBuilder] and [Snapshot](crate::snapshot::Snapshot).
+/// The [edit](Ur::edit) method takes a closure to updating the internal state.
+/// The closure is a function that consumes a current state and returns a new state.
+/// A previous state can be restored by calling the [undo](Ur::undo).
+/// The [redo](Ur::redo) is reverse operation of the [undo](Ur::undo).
+///
+/// See also [UrBuilder] and [Snapshot](crate::snapshot::Snapshot) for some customization.
 ///
 /// # Information
 /// ## Snapshot trait
