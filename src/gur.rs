@@ -96,8 +96,17 @@ where
     }
 
     pub(crate) fn undo_multi(&mut self, count: usize) -> Option<&T> {
-        debug_assert!(count < isize::MAX as usize);
-        self.jumpdo(-(count as isize))
+        if 0 == count {
+            // Nothing to do
+            return Some(self.get());
+        }
+
+        if self.history.len_before_current() < count as usize {
+            return None;
+        }
+
+        self.undo_impl(count);
+        Some(self.get())
     }
 
     pub(crate) fn redo(&mut self) -> Option<&T> {
@@ -105,31 +114,25 @@ where
     }
 
     pub(crate) fn redo_multi(&mut self, count: usize) -> Option<&T> {
-        debug_assert!(count < isize::MAX as usize);
-        self.jumpdo(count as isize)
-    }
-
-    pub(crate) fn jumpdo(&mut self, count: isize) -> Option<&T> {
         if 0 == count {
             // Nothing to do
             return Some(self.get());
         }
 
-        // Check the argment
-        if count < 0 {
-            // Undo
-            if self.history.len_before_current() < count.abs() as usize {
-                return None;
-            }
-        } else {
-            // Redo
-            if self.history.len_after_current() < count.abs() as usize {
-                return None;
-            }
+        if self.history.len_after_current() < count {
+            return None;
         }
 
-        self.jumpdo_impl(count);
+        self.redo_impl(count);
         Some(self.get())
+    }
+
+    pub(crate) fn jumpdo(&mut self, count: isize) -> Option<&T> {
+        if count < 0 {
+            self.undo_multi(count.abs() as usize)
+        } else {
+            self.redo_multi(count as usize)
+        }
     }
 
     fn current(&self) -> usize {
@@ -199,13 +202,6 @@ where
 
         self.state = Some(state);
         self.history.set_current(target_idx);
-    }
-    fn jumpdo_impl(&mut self, count: isize) {
-        if count < 0 {
-            self.undo_impl(count.abs() as usize);
-        } else if 0 < count {
-            self.redo_impl(count as usize);
-        }
     }
 
     // Regenerate a target state from history WITHOUT reusing the current state.
