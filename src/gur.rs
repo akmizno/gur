@@ -91,6 +91,13 @@ where
         }
     }
 
+    pub(crate) fn undoable_count(&self) -> usize {
+        self.history.len_before_current()
+    }
+    pub(crate) fn redoable_count(&self) -> usize {
+        self.history.len_after_current()
+    }
+
     pub(crate) fn undo(&mut self) -> Option<&T> {
         self.undo_multi(1)
     }
@@ -101,7 +108,7 @@ where
             return Some(self.get());
         }
 
-        if self.history.len_before_current() < count as usize {
+        if self.undoable_count() < count as usize {
             return None;
         }
 
@@ -119,7 +126,7 @@ where
             return Some(self.get());
         }
 
-        if self.history.len_after_current() < count {
+        if self.redoable_count() < count {
             return None;
         }
 

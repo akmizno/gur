@@ -42,6 +42,12 @@ where
     pub fn into_inner(self) -> T {
         self.0.into_inner()
     }
+    pub fn undoable_count(&self) -> usize {
+        self.0.undoable_count()
+    }
+    pub fn redoable_count(&self) -> usize {
+        self.0.redoable_count()
+    }
     pub fn undo(&mut self) -> Option<&T> {
         self.0.undo()
     }

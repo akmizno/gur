@@ -49,6 +49,14 @@ where
         self.0.into_inner()
     }
 
+    pub(crate) fn undoable_count(&self) -> usize {
+        self.0.undoable_count()
+    }
+
+    pub(crate) fn redoable_count(&self) -> usize {
+        self.0.redoable_count()
+    }
+
     pub(crate) fn undo(&mut self) -> Option<&T> {
         self.0.undo()
     }

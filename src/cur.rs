@@ -93,6 +93,16 @@ impl<'a, T: Clone> Cur<'a, T> {
         self.0.into_inner()
     }
 
+    /// Returns the number of versions older than current state in the history.
+    pub fn undoable_count(&self) -> usize {
+        self.0.undoable_count()
+    }
+
+    /// Returns the number of versions newer than current state in the history.
+    pub fn redoable_count(&self) -> usize {
+        self.0.redoable_count()
+    }
+
     /// Restores the previous state.
     /// Same as `self.undo_multi(1)`.
     ///
@@ -518,5 +528,75 @@ mod test {
         assert_eq!(1, *s);
 
         assert_eq!(1, s.into_inner());
+    }
+
+    #[test]
+    fn undoable_count() {
+        let mut s = CurBuilder::default().build(0);
+
+        let _t0 = *s; // 0
+        assert_eq!(s.undoable_count(), 0);
+        let _t1 = *s.edit(|n| n + 1); // 1
+        assert_eq!(s.undoable_count(), 1);
+        let _t2 = *s.edit(|n| n * 3); // 3
+        assert_eq!(s.undoable_count(), 2);
+        let _t3 = *s.edit(|n| n + 5); // 8
+        assert_eq!(s.undoable_count(), 3);
+        let _t4 = *s.edit(|n| n * 7); // 56
+        assert_eq!(s.undoable_count(), 4);
+        let _t5 = *s.edit(|n| n + 9); // 65
+        assert_eq!(s.undoable_count(), 5);
+
+        let _u4 = s.undo().unwrap();
+        assert_eq!(s.undoable_count(), 4);
+        let _u1 = s.undo_multi(3).unwrap();
+        assert_eq!(s.undoable_count(), 1);
+        let _u0 = s.undo().unwrap();
+        assert_eq!(s.undoable_count(), 0);
+        let _u0 = s.undo();
+        assert_eq!(s.undoable_count(), 0);
+
+        let _r1 = s.redo().unwrap();
+        assert_eq!(s.undoable_count(), 1);
+        let _r3 = s.redo_multi(2).unwrap();
+        assert_eq!(s.undoable_count(), 3);
+        let t6 = *s.edit(|n| n + 11); // 19
+        assert_eq!(t6, 19);
+        assert_eq!(s.undoable_count(), 4);
+    }
+
+    #[test]
+    fn redoable_count() {
+        let mut s = CurBuilder::default().build(0);
+
+        let _t0 = *s; // 0
+        assert_eq!(s.redoable_count(), 0);
+        let _t1 = *s.edit(|n| n + 1); // 1
+        assert_eq!(s.redoable_count(), 0);
+        let _t2 = *s.edit(|n| n * 3); // 3
+        assert_eq!(s.redoable_count(), 0);
+        let _t3 = *s.edit(|n| n + 5); // 8
+        assert_eq!(s.redoable_count(), 0);
+        let _t4 = *s.edit(|n| n * 7); // 56
+        assert_eq!(s.redoable_count(), 0);
+        let _t5 = *s.edit(|n| n + 9); // 65
+        assert_eq!(s.redoable_count(), 0);
+
+        let _u4 = s.undo().unwrap();
+        assert_eq!(s.redoable_count(), 1);
+        let _u1 = s.undo_multi(3).unwrap();
+        assert_eq!(s.redoable_count(), 4);
+        let _u0 = s.undo().unwrap();
+        assert_eq!(s.redoable_count(), 5);
+        let _u0 = s.undo();
+        assert_eq!(s.redoable_count(), 5);
+
+        let _r1 = s.redo().unwrap();
+        assert_eq!(s.redoable_count(), 4);
+        let _r3 = s.redo_multi(2).unwrap();
+        assert_eq!(s.redoable_count(), 2);
+        let t6 = *s.edit(|n| n + 11); // 19
+        assert_eq!(t6, 19);
+        assert_eq!(s.redoable_count(), 0);
     }
 }
