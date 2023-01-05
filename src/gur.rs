@@ -142,12 +142,12 @@ where
         }
     }
 
-    fn current(&self) -> usize {
+    fn current_index(&self) -> usize {
         self.history.current_index()
     }
     fn redo_impl(&mut self, count: usize) {
         debug_assert!(0 < count);
-        let current_idx = self.current();
+        let current_idx = self.current_index();
         let target_idx = current_idx + count;
         let last_snapshot_idx = self.history.find_last_snapshot_index(target_idx);
 
@@ -181,8 +181,8 @@ where
 
     fn undo_impl(&mut self, count: usize) {
         debug_assert!(0 < count);
-        debug_assert!(count <= self.current());
-        let target_idx = self.current() - count;
+        debug_assert!(count <= self.current_index());
+        let target_idx = self.current_index() - count;
         let last_snapshot_idx = self.history.find_last_snapshot_index(target_idx);
 
         let (mut state, begin, cmd_count) = {
