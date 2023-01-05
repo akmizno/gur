@@ -1,5 +1,5 @@
+use crate::history::{History, Node};
 use crate::metrics::Metrics;
-use crate::node::Node;
 use crate::snapshot::SnapshotHandler;
 use crate::triggers::snapshot_trigger::snapshot_never;
 use std::marker::PhantomData;
@@ -54,8 +54,7 @@ where
 {
     state: Option<T>,
 
-    history: Vec<Node<'a, T, S>>,
-    current: usize,
+    history: History<Box<dyn Fn(T) -> T + 'a>, Box<S>>,
 
     snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
     _snapshot_handler: PhantomData<H>,
@@ -68,20 +67,6 @@ where
     fn get(&self) -> &T {
         debug_assert!(self.state.is_some());
         unsafe { self.state.as_ref().unwrap_unchecked() }
-    }
-
-    unsafe fn restore_from_snapshot(&self, target: usize) -> T {
-        debug_assert!(target < self.history.len());
-        debug_assert!(self.history[target].generator().is_snapshot());
-
-        let snapshot = self
-            .history
-            .get_unchecked(target)
-            .generator()
-            .generate_if_snapshot()
-            .unwrap_unchecked();
-
-        H::from_snapshot(snapshot)
     }
 
     fn take(&mut self) -> T {
@@ -97,11 +82,10 @@ where
         initial_state: T,
         snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
     ) -> Self {
-        let first_node = Node::from_snapshot(H::to_snapshot(&initial_state));
+        let first_node = Node::from_snapshot(Box::new(H::to_snapshot(&initial_state)));
         Self {
             state: Some(initial_state),
-            history: vec![first_node],
-            current: 0,
+            history: History::new_unlimited(first_node),
             snapshot_trigger,
             _snapshot_handler: PhantomData,
         }
@@ -134,12 +118,12 @@ where
         // Check the argment
         if count < 0 {
             // Undo
-            if self.current < count.abs() as usize {
+            if self.history.len_before_current() < count.abs() as usize {
                 return None;
             }
         } else {
             // Redo
-            if self.history.len() <= self.current + count.abs() as usize {
+            if self.history.len_after_current() < count.abs() as usize {
                 return None;
             }
         }
@@ -148,57 +132,80 @@ where
         Some(self.get())
     }
 
-    fn get_regeneration_range(&self, target: usize) -> (usize, usize) {
-        debug_assert!(target < self.history.len());
-        let last_node = unsafe { self.history.get_unchecked(target) };
-        let dist = last_node.metrics().distance_from_snapshot();
-        debug_assert!(dist <= target);
-        let first = target - dist;
-        debug_assert!(self.history[first].generator().is_snapshot());
-        (first, target + 1)
+    fn current(&self) -> usize {
+        self.history.current_index()
     }
+    fn redo_impl(&mut self, count: usize) {
+        debug_assert!(0 < count);
+        let current_idx = self.current();
+        let target_idx = current_idx + count;
+        let last_snapshot_idx = self.history.find_last_snapshot_index(target_idx);
 
-    fn regenerate(first_state: T, history: &[Node<'a, T, S>]) -> T {
-        let mut state = first_state;
-        for node in history {
-            let next = node.generator().generate_if_command(state);
-            debug_assert!(next.is_some());
-            state = unsafe { next.unwrap_unchecked() };
+        let (mut state, begin, cmd_count) = if last_snapshot_idx <= current_idx {
+            (self.take(), current_idx, count)
+        } else {
+            let _ = self.take(); // drop the current state before a first state restored.
+
+            let g = self.history.get_node(last_snapshot_idx).generator();
+            debug_assert!(g.is_snapshot());
+            let first_state = H::from_snapshot(g.snapshot().unwrap());
+
+            debug_assert!(last_snapshot_idx <= target_idx);
+            let cmd_count = target_idx - last_snapshot_idx;
+
+            (first_state, last_snapshot_idx, cmd_count)
+        };
+
+        if 0 < cmd_count {
+            let iter = self.history.iter_from(begin + 1).take(cmd_count);
+            for node in iter {
+                debug_assert!(!node.generator().is_snapshot());
+                let f = node.generator().command().unwrap();
+                state = f(state);
+            }
         }
 
-        state
+        self.state = Some(state);
+        self.history.set_current(begin + cmd_count);
     }
 
+    fn undo_impl(&mut self, count: usize) {
+        debug_assert!(0 < count);
+        debug_assert!(count <= self.current());
+        let target_idx = dbg!(self.current() - count);
+        let last_snapshot_idx = dbg!(self.history.find_last_snapshot_index(target_idx));
+
+        let (mut state, begin, cmd_count) = {
+            let _ = self.take(); // drop the current state before a first state restored.
+
+            let g = self.history.get_node(last_snapshot_idx).generator();
+            debug_assert!(g.is_snapshot());
+            let first_state = H::from_snapshot(g.snapshot().unwrap());
+
+            let cmd_count = target_idx - last_snapshot_idx;
+
+            (first_state, last_snapshot_idx, cmd_count)
+        };
+
+        if 0 < cmd_count {
+            let iter = self.history.iter_from(begin + 1).take(cmd_count);
+
+            for node in iter {
+                debug_assert!(!node.generator().is_snapshot());
+                let f = node.generator().command().unwrap();
+                state = f(state);
+            }
+        }
+
+        self.state = Some(state);
+        self.history.set_current(target_idx);
+    }
     fn jumpdo_impl(&mut self, count: isize) {
-        debug_assert!(count != 0);
-
-        let target = if count < 0 {
-            debug_assert!(count.abs() as usize <= self.current);
-            self.current - count.abs() as usize
-        } else {
-            self.current + count as usize
-        };
-
-        debug_assert!(target < self.history.len());
-
-        let (begin, end) = self.get_regeneration_range(target);
-
-        let (first_state, begin) = if begin <= self.current && self.current < end {
-            // Reuse current state
-            debug_assert!(self.state.is_some());
-            (self.take(), self.current)
-        } else {
-            // The current state is not resusable.
-
-            // Drop the old state before runnning.
-            self.state = None;
-
-            let restored = unsafe { self.restore_from_snapshot(begin) };
-            (restored, begin)
-        };
-
-        self.state = Some(Self::regenerate(first_state, &self.history[begin + 1..end]));
-        self.current = target;
+        if count < 0 {
+            self.undo_impl(count.abs() as usize);
+        } else if 0 < count {
+            self.redo_impl(count as usize);
+        }
     }
 
     // Regenerate a target state from history WITHOUT reusing the current state.
@@ -206,11 +213,16 @@ where
         // Drop the old state before running.
         self.state = None;
 
-        let (begin, end) = self.get_regeneration_range(target);
+        let mut it = self.history.iter_from_last_snapshot(target);
+        let snapshot = it.next().unwrap().generator().snapshot().unwrap();
+        let mut state = H::from_snapshot(snapshot);
+        for command_node in it {
+            let command = command_node.generator().command().unwrap();
+            state = command(state);
+        }
 
-        let first_state = unsafe { self.restore_from_snapshot(begin) };
-        self.state = Some(Self::regenerate(first_state, &self.history[begin + 1..end]));
-        self.current = target;
+        self.state = Some(state);
+        self.history.set_current(target);
     }
 
     pub(crate) fn edit<F>(&mut self, command: F) -> &T
@@ -233,28 +245,25 @@ where
                 (new_state, elapsed)
             } else {
                 // Reset the current state
-                self.reset_state(self.current);
+                self.reset_state(self.history.current_index());
                 return None;
             };
 
-        self.history.truncate(self.current + 1);
-
-        let last_metrics = self.history.last().unwrap().metrics();
+        let last_metrics = self.history.current().metrics();
         let new_metrics = last_metrics.make_next(elapsed);
 
         if (self.snapshot_trigger)(&new_metrics) {
             self.history
-                .push(Node::from_snapshot(H::to_snapshot(&new_state)));
+                .push_node(Node::from_snapshot(Box::new(H::to_snapshot(&new_state))));
         } else {
-            self.history.push(Node::from_command(
+            self.history.push_node(Node::from_command(
                 // This must succeed.
-                move |s| unsafe { command(s).unwrap_unchecked() },
+                Box::new(move |s| unsafe { command(s).unwrap_unchecked() }),
                 new_metrics,
             ));
         }
 
         self.state.replace(new_state);
-        self.current += 1;
         Some(self.get())
     }
 
@@ -280,17 +289,15 @@ where
         let old_state = self.take();
         match command(old_state) {
             Ok(new_state) => {
-                self.history.truncate(self.current + 1);
                 self.history
-                    .push(Node::from_snapshot(H::to_snapshot(&new_state)));
+                    .push_node(Node::from_snapshot(Box::new(H::to_snapshot(&new_state))));
 
                 self.state.replace(new_state);
-                self.current += 1;
 
                 Ok(self.get())
             }
             Err(e) => {
-                self.reset_state(self.current);
+                self.reset_state(self.history.current_index());
                 Err(e)
             }
         }
