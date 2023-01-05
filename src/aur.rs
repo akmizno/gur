@@ -54,8 +54,8 @@ where
     pub fn redo_multi(&mut self, count: usize) -> Option<&T> {
         self.0.redo_multi(count)
     }
-    pub fn jumpdo(&mut self, count: isize) -> Option<&T> {
-        self.0.jumpdo(count)
+    pub fn jump(&mut self, count: isize) -> Option<&T> {
+        self.0.jump(count)
     }
 
     pub fn edit<F>(&mut self, command: F) -> &T

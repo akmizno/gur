@@ -65,8 +65,8 @@ where
         self.0.redo_multi(count)
     }
 
-    pub(crate) fn jumpdo(&mut self, count: isize) -> Option<&T> {
-        self.0.jumpdo(count)
+    pub(crate) fn jump(&mut self, count: isize) -> Option<&T> {
+        self.0.jump(count)
     }
 
     pub(crate) fn edit<F>(&mut self, command: F) -> &T

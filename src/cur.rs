@@ -140,8 +140,8 @@ impl<'a, T: Clone> Cur<'a, T> {
     ///
     /// - `count < 0` => `self.undo_multi(-count)`.
     /// - `0 < count` => `self.redo_multi(count)`.
-    pub fn jumpdo(&mut self, count: isize) -> Option<&T> {
-        self.0.jumpdo(count)
+    pub fn jump(&mut self, count: isize) -> Option<&T> {
+        self.0.jump(count)
     }
 
     /// Takes a closure and update the internal state.
@@ -407,7 +407,7 @@ mod test {
     }
 
     #[test]
-    fn jumpdo() {
+    fn jump() {
         let mut s = CurBuilder::default().build(0);
 
         let t0 = *s; // 0
@@ -417,27 +417,27 @@ mod test {
         let t4 = *s.edit(|n| n * 7); // 56
         let t5 = *s.edit(|n| n + 9); // 65
 
-        // undo by jumpdo()
-        let j4 = s.jumpdo(-1).unwrap();
+        // undo by jump()
+        let j4 = s.jump(-1).unwrap();
         assert_eq!(t4, *j4);
         assert_eq!(t4, *s);
-        let j2 = s.jumpdo(-2).unwrap();
+        let j2 = s.jump(-2).unwrap();
         assert_eq!(t2, *j2);
         assert_eq!(t2, *s);
-        assert!(s.jumpdo(-3).is_none());
-        let j0 = s.jumpdo(-2).unwrap();
+        assert!(s.jump(-3).is_none());
+        let j0 = s.jump(-2).unwrap();
         assert_eq!(t0, *j0);
         assert_eq!(t0, *s);
 
-        // redo by jumpdo()
-        let j1 = s.jumpdo(1).unwrap();
+        // redo by jump()
+        let j1 = s.jump(1).unwrap();
         assert_eq!(t1, *j1);
         assert_eq!(t1, *s);
-        let j3 = s.jumpdo(2).unwrap();
+        let j3 = s.jump(2).unwrap();
         assert_eq!(t3, *j3);
         assert_eq!(t3, *s);
-        assert!(s.jumpdo(3).is_none());
-        let j5 = s.jumpdo(2).unwrap();
+        assert!(s.jump(3).is_none());
+        let j5 = s.jump(2).unwrap();
         assert_eq!(t5, *j5);
         assert_eq!(t5, *s);
     }

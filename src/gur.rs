@@ -127,7 +127,7 @@ where
         Some(self.get())
     }
 
-    pub(crate) fn jumpdo(&mut self, count: isize) -> Option<&T> {
+    pub(crate) fn jump(&mut self, count: isize) -> Option<&T> {
         if count < 0 {
             self.undo_multi(count.abs() as usize)
         } else {
