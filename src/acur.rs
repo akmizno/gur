@@ -10,6 +10,11 @@ impl<'a, T: Clone> AcurBuilder<'a, T> {
         Self(AgurBuilder::new())
     }
 
+    pub fn history_limit(mut self, count: usize) -> Self {
+        self.0 = self.0.history_limit(count);
+        self
+    }
+
     pub fn snapshot_trigger<F>(self, f: F) -> Self
     where
         F: FnMut(&Metrics) -> bool + Send + Sync + 'a,

@@ -14,6 +14,16 @@ impl<'a, T: Clone> CurBuilder<'a, T> {
 }
 
 impl<'a, T: Clone> CurBuilder<'a, T> {
+    /// Specify the maximum number of changes stored in the history.
+    ///
+    /// When more changes are applied than the limit, the oldest record in the history is removed.
+    ///
+    /// `count=0` means no limit.
+    pub fn history_limit(mut self, count: usize) -> Self {
+        self.0 = self.0.history_limit(count);
+        self
+    }
+
     /// Takes a closure to decide whether to take a snapshot of internal state.
     ///
     /// # Remarks
@@ -597,6 +607,53 @@ mod test {
         assert_eq!(s.redoable_count(), 2);
         let t6 = *s.edit(|n| n + 11); // 19
         assert_eq!(t6, 19);
+        assert_eq!(s.redoable_count(), 0);
+    }
+
+    #[test]
+    fn history_limit() {
+        let mut s = CurBuilder::default().history_limit(3).build(0);
+
+        let _t0 = *s; // 0
+        assert_eq!(s.undoable_count(), 0);
+        assert_eq!(s.redoable_count(), 0);
+        let _t1 = *s.edit(|n| n + 1); // 1
+        assert_eq!(s.undoable_count(), 1);
+        assert_eq!(s.redoable_count(), 0);
+        let _t2 = *s.edit(|n| n * 3); // 3
+        assert_eq!(s.undoable_count(), 2);
+        assert_eq!(s.redoable_count(), 0);
+        let _t3 = *s.edit(|n| n + 5); // 8
+        assert_eq!(s.undoable_count(), 2);
+        assert_eq!(s.redoable_count(), 0);
+        let _t4 = *s.edit(|n| n * 7); // 56
+        assert_eq!(s.undoable_count(), 2);
+        assert_eq!(s.redoable_count(), 0);
+        let _t5 = *s.edit(|n| n + 9); // 65
+        assert_eq!(s.undoable_count(), 2);
+        assert_eq!(s.redoable_count(), 0);
+
+        let _u4 = s.undo().unwrap();
+        assert_eq!(s.undoable_count(), 1);
+        assert_eq!(s.redoable_count(), 1);
+        let _u3 = s.undo().unwrap();
+        assert_eq!(s.undoable_count(), 0);
+        assert_eq!(s.redoable_count(), 2);
+
+        assert!(s.undo().is_none());
+
+        let _r4 = s.redo().unwrap();
+        assert_eq!(s.undoable_count(), 1);
+        assert_eq!(s.redoable_count(), 1);
+
+        let t6 = *s.edit(|n| n + 11); // 67
+        assert_eq!(t6, 67);
+        assert_eq!(s.undoable_count(), 2);
+        assert_eq!(s.redoable_count(), 0);
+
+        let t7 = *s.edit(|n| n + 13); // 80
+        assert_eq!(t7, 80);
+        assert_eq!(s.undoable_count(), 2);
         assert_eq!(s.redoable_count(), 0);
     }
 }

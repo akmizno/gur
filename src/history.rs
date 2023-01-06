@@ -98,7 +98,7 @@ impl<F, S> History<F, S> {
         let new_len = self.len() + 1;
 
         if self.limit != 0 && self.limit < new_len {
-            debug_assert_eq!(self.limit, new_len + 1);
+            debug_assert_eq!(self.limit + 1, new_len);
             self.logical_first += 1;
             self.trim_before_snapshot();
         }
@@ -106,9 +106,6 @@ impl<F, S> History<F, S> {
         self.inner.push_back(node);
     }
 
-    pub(crate) fn get_node(&self, index: usize) -> &Node<F, S> {
-        self.get_node_inner(self.inner_index(index))
-    }
     fn get_node_inner(&self, index: usize) -> &Node<F, S> {
         &self.inner[index]
     }
@@ -152,14 +149,19 @@ impl<F, S> History<F, S> {
             }
         }
     }
-    pub(crate) fn find_last_snapshot_index(&self, index: usize) -> usize {
+    // Returns None if the index is out of bound.
+    pub(crate) fn find_last_snapshot_index(&self, index: usize) -> Option<usize> {
         let inner = self.find_last_snapshot_index_inner(self.inner_index(index));
         self.outer_index(inner)
     }
 
-    fn outer_index(&self, inner_index: usize) -> usize {
-        debug_assert!(self.logical_first <= inner_index);
-        inner_index - self.logical_first
+    // Returns None if the index is out of bound.
+    fn outer_index(&self, inner_index: usize) -> Option<usize> {
+        if inner_index < self.logical_first {
+            None
+        } else {
+            Some(inner_index - self.logical_first)
+        }
     }
     fn inner_index(&self, index: usize) -> usize {
         index + self.logical_first

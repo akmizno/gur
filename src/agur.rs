@@ -20,6 +20,11 @@ impl<'a, T, S, H> AgurBuilder<'a, T, S, H>
 where
     H: SnapshotHandler<State = T, Snapshot = S>,
 {
+    pub(crate) fn history_limit(mut self, count: usize) -> Self {
+        self.0 = self.0.history_limit(count);
+        self
+    }
+
     pub(crate) fn snapshot_trigger<F>(mut self, f: F) -> Self
     where
         F: FnMut(&Metrics) -> bool + Send + Sync + 'a,
