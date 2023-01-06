@@ -41,7 +41,7 @@ impl<'a> App<'a> {
 
     fn shuffle(&mut self) {
         // NOTE
-        // This method uses try_edit() to store the old array as a snapshot
+        // This method uses try_edit() to store the updated array as a snapshot
         // because of non-reproducibility of the rng.
         self.data
             .try_edit(|mut data| {
