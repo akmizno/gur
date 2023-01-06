@@ -10,8 +10,8 @@ impl<'a, T: Clone> AcurBuilder<'a, T> {
         Self(AgurBuilder::new())
     }
 
-    pub fn history_limit(mut self, count: usize) -> Self {
-        self.0 = self.0.history_limit(count);
+    pub fn capacity(mut self, capacity: usize) -> Self {
+        self.0 = self.0.capacity(capacity);
         self
     }
 
@@ -37,6 +37,9 @@ impl<'a, T: Clone> Acur<'a, T> {
     }
     pub fn into_inner(self) -> T {
         self.0.into_inner()
+    }
+    pub fn capacity(&self) -> Option<usize> {
+        self.0.capacity()
     }
     pub fn undoable_count(&self) -> usize {
         self.0.undoable_count()

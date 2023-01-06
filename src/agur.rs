@@ -20,8 +20,8 @@ impl<'a, T, S, H> AgurBuilder<'a, T, S, H>
 where
     H: SnapshotHandler<State = T, Snapshot = S>,
 {
-    pub(crate) fn history_limit(mut self, count: usize) -> Self {
-        self.0 = self.0.history_limit(count);
+    pub(crate) fn capacity(mut self, capacity: usize) -> Self {
+        self.0 = self.0.capacity(capacity);
         self
     }
 
@@ -52,6 +52,10 @@ where
 
     pub(crate) fn into_inner(self) -> T {
         self.0.into_inner()
+    }
+
+    pub(crate) fn capacity(&self) -> Option<usize> {
+        self.0.capacity()
     }
 
     pub(crate) fn undoable_count(&self) -> usize {

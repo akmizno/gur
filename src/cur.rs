@@ -16,11 +16,12 @@ impl<'a, T: Clone> CurBuilder<'a, T> {
 impl<'a, T: Clone> CurBuilder<'a, T> {
     /// Specify the maximum number of changes stored in the history.
     ///
-    /// When more changes are applied than the limit, the oldest record in the history is removed.
+    /// When more changes are applied than the capacity, the oldest record in the history is removed.
     ///
-    /// `count=0` means no limit.
-    pub fn history_limit(mut self, count: usize) -> Self {
-        self.0 = self.0.history_limit(count);
+    /// # Remarks
+    /// `capacity=0` means no limit.
+    pub fn capacity(mut self, capacity: usize) -> Self {
+        self.0 = self.0.capacity(capacity);
         self
     }
 
@@ -101,6 +102,11 @@ impl<'a, T: Clone> Cur<'a, T> {
     /// Returns the current state object, consuming the self.
     pub fn into_inner(self) -> T {
         self.0.into_inner()
+    }
+
+    /// Returns the maximum number of changes stored in the history.
+    pub fn capacity(&self) -> Option<usize> {
+        self.0.capacity()
     }
 
     /// Returns the number of versions older than current state in the history.
@@ -612,7 +618,7 @@ mod test {
 
     #[test]
     fn history_limit() {
-        let mut s = CurBuilder::default().history_limit(3).build(0);
+        let mut s = CurBuilder::default().capacity(3).build(0);
 
         let _t0 = *s; // 0
         assert_eq!(s.undoable_count(), 0);
@@ -655,5 +661,24 @@ mod test {
         assert_eq!(t7, 80);
         assert_eq!(s.undoable_count(), 2);
         assert_eq!(s.redoable_count(), 0);
+    }
+
+    #[test]
+    fn capacity() {
+        assert!(CurBuilder::default().build(0).capacity().is_none());
+        assert!(CurBuilder::default()
+            .capacity(0)
+            .build(0)
+            .capacity()
+            .is_none());
+
+        assert_eq!(
+            CurBuilder::default()
+                .capacity(3)
+                .build(0)
+                .capacity()
+                .unwrap(),
+            3
+        );
     }
 }

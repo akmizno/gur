@@ -56,7 +56,7 @@ impl<F, S> Node<F, S> {
 pub(crate) struct History<F, S> {
     inner: VecDeque<Node<F, S>>,
     current: usize,
-    limit: usize, // 0: no limit
+    capacity: usize, // 0: no limit
     logical_first: usize,
 }
 
@@ -67,13 +67,13 @@ impl<F, S> History<F, S> {
         History {
             inner: v,
             current: 0,
-            limit: 0,
+            capacity: 0,
             logical_first: 0,
         }
     }
-    pub(crate) fn new(init: Node<F, S>, limit: usize) -> History<F, S> {
+    pub(crate) fn new(init: Node<F, S>, capacity: usize) -> History<F, S> {
         let mut history = History::new_unlimited(init);
-        history.limit = limit;
+        history.capacity = capacity;
         history
     }
 
@@ -97,13 +97,17 @@ impl<F, S> History<F, S> {
         self.current += 1;
         let new_len = self.len() + 1;
 
-        if self.limit != 0 && self.limit < new_len {
-            debug_assert_eq!(self.limit + 1, new_len);
+        if self.capacity() != 0 && self.capacity() < new_len {
+            debug_assert_eq!(self.capacity() + 1, new_len);
             self.logical_first += 1;
             self.trim_before_snapshot();
         }
 
         self.inner.push_back(node);
+    }
+
+    pub(crate) fn capacity(&self) -> usize {
+        self.capacity
     }
 
     fn get_node_inner(&self, index: usize) -> &Node<F, S> {

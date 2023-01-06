@@ -9,7 +9,7 @@ pub(crate) struct GurBuilder<'a, T, S, H>
 where
     H: SnapshotHandler<State = T, Snapshot = S>,
 {
-    history_limit: usize,
+    capacity: usize,
     snapshot_trigger: Option<Box<dyn FnMut(&Metrics) -> bool + 'a>>,
     _snapshot_handler: PhantomData<H>,
 }
@@ -20,14 +20,14 @@ where
 {
     pub(crate) fn new() -> Self {
         Self {
-            history_limit: 0,
+            capacity: 0,
             snapshot_trigger: None,
             _snapshot_handler: PhantomData,
         }
     }
 
-    pub(crate) fn history_limit(mut self, count: usize) -> Self {
-        self.history_limit = count;
+    pub(crate) fn capacity(mut self, capacity: usize) -> Self {
+        self.capacity = capacity;
         self
     }
 
@@ -42,7 +42,7 @@ where
     pub(crate) fn build(self, initial_state: T) -> Gur<'a, T, S, H> {
         Gur::new(
             initial_state,
-            self.history_limit,
+            self.capacity,
             self.snapshot_trigger.unwrap_or(Box::new(snapshot_never())),
         )
     }
@@ -88,15 +88,15 @@ where
 
     pub(crate) fn new(
         initial_state: T,
-        history_limit: usize,
+        capacity: usize,
         snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
     ) -> Self {
         let first_node = Node::from_snapshot(Box::new(H::to_snapshot(&initial_state)));
 
-        let history = if history_limit == 0 {
+        let history = if capacity == 0 {
             History::new_unlimited(first_node)
         } else {
-            History::new(first_node, history_limit)
+            History::new(first_node, capacity)
         };
 
         Self {
@@ -104,6 +104,15 @@ where
             history,
             snapshot_trigger,
             _snapshot_handler: PhantomData,
+        }
+    }
+
+    pub(crate) fn capacity(&self) -> Option<usize> {
+        let cap = self.history.capacity();
+        if 0 < cap {
+            Some(cap)
+        } else {
+            None
         }
     }
 
