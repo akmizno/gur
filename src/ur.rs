@@ -1,4 +1,5 @@
 use crate::gur::{Gur, GurBuilder};
+use crate::interface::*;
 use crate::metrics::Metrics;
 use crate::snapshot::{Snapshot, TraitSnapshot};
 
@@ -18,39 +19,33 @@ where
     }
 }
 
-impl<'a, T, S> UrBuilder<'a, T, S>
+impl<'a, T, S> IBuilder for UrBuilder<'a, T, S>
 where
     T: Snapshot<Snapshot = S>,
 {
-    /// Specify the maximum number of changes stored in the history.
-    ///
-    /// When more changes are applied than the capacity, the oldest record in the history is removed.
-    ///
-    /// # Remarks
-    /// `capacity=0` means no limit.
-    pub fn capacity(mut self, capacity: usize) -> Self {
+    type State = T;
+    type Target = Ur<'a, T, S>;
+
+    fn capacity(mut self, capacity: usize) -> Self {
         self.0 = self.0.capacity(capacity);
         self
     }
 
-    /// Takes a closure to decide whether to take a snapshot of internal state.
-    ///
-    /// # Remarks
-    /// [snapshot_never](crate::triggers::snapshot_trigger::snapshot_never) are used as a default
-    /// trigger.
-    /// Note that it may cause performance problem.
-    /// See [Snapshot trigger](crate::triggers#Snapshot&#32;trigger) for more details.
-    pub fn snapshot_trigger<F>(mut self, f: F) -> Self
+    fn build(self, initial_state: T) -> Ur<'a, T, S> {
+        Ur::new(self.0.build(initial_state))
+    }
+}
+
+impl<'a, T, S> IBuilderTrigger<'a> for UrBuilder<'a, T, S>
+where
+    T: Snapshot<Snapshot = S>,
+{
+    fn snapshot_trigger<F>(mut self, f: F) -> Self
     where
         F: FnMut(&Metrics) -> bool + 'a,
     {
         self.0 = self.0.snapshot_trigger(f);
         self
-    }
-
-    /// Creates a new [Ur] object with an initial state of T.
-    pub fn build(self, initial_state: T) -> Ur<'a, T, S> {
-        Ur::new(self.0.build(initial_state))
     }
 }
 
@@ -58,6 +53,7 @@ where
 ///
 /// # Sample code
 /// ```
+/// use gur::prelude::*;
 /// use gur::ur::{Ur, UrBuilder};
 /// use gur::snapshot::Snapshot;
 ///
@@ -127,138 +123,60 @@ impl<'a, T, S> Ur<'a, T, S>
 where
     T: Snapshot<Snapshot = S>,
 {
-    pub(crate) fn new(inner: Gur<'a, T, S, TraitSnapshot<T, S>>) -> Self {
+    fn new(inner: Gur<'a, T, S, TraitSnapshot<T, S>>) -> Self {
         Self(inner)
     }
+}
 
-    /// Returns the current state object, consuming the self.
-    pub fn into_inner(self) -> T {
+impl<'a, T, S> IUndoRedo for Ur<'a, T, S>
+where
+    T: Snapshot<Snapshot = S>,
+{
+    type State = T;
+
+    fn into_inner(self) -> T {
         self.0.into_inner()
     }
 
-    /// Returns the maximum number of changes stored in the history.
-    pub fn capacity(&self) -> Option<usize> {
+    fn capacity(&self) -> Option<usize> {
         self.0.capacity()
     }
 
-    /// Returns the number of versions older than current state in the history.
-    pub fn undoable_count(&self) -> usize {
+    fn undoable_count(&self) -> usize {
         self.0.undoable_count()
     }
 
-    /// Returns the number of versions newer than current state in the history.
-    pub fn redoable_count(&self) -> usize {
+    fn redoable_count(&self) -> usize {
         self.0.redoable_count()
     }
 
-    /// Restores the previous state.
-    /// Same as `self.undo_multi(1)`.
-    ///
-    /// # Return
-    /// [None] is returned if no older version exists in the history,
-    /// otherwise immutable reference to the updated internal state.
-    pub fn undo(&mut self) -> Option<&T> {
-        self.0.undo()
-    }
-
-    /// Undo multiple steps.
-    /// This method is more efficient than running `self.undo()` multiple times.
-    ///
-    /// # Return
-    /// [None] is returned if the target version is out of the history,
-    /// otherwise immutable reference to the updated internal state.
-    /// If `count=0`, this method does nothing and returns reference to the current state.
-    pub fn undo_multi(&mut self, count: usize) -> Option<&T> {
+    fn undo_multi(&mut self, count: usize) -> Option<&T> {
         self.0.undo_multi(count)
     }
 
-    /// Restores the next state.
-    /// Same as `self.redo_multi(1)`.
-    ///
-    /// # Return
-    /// [None] is returned if no newer version exists in the history,
-    /// otherwise immutable reference to the updated internal state.
-    pub fn redo(&mut self) -> Option<&T> {
-        self.0.redo()
-    }
-
-    /// Redo multiple steps.
-    /// This method is more efficient than running `self.redo()` multiple times.
-    ///
-    /// # Return
-    /// [None] is returned if the target version is out of the history,
-    /// otherwise immutable reference to the updated internal state.
-    /// If `count=0`, this method does nothing and returns reference to the current state.
-    pub fn redo_multi(&mut self, count: usize) -> Option<&T> {
+    fn redo_multi(&mut self, count: usize) -> Option<&T> {
         self.0.redo_multi(count)
     }
 
-    /// Undo-redo bidirectionally.
-    /// This is integrated method of [undo_multi](Ur::undo_multi) and [redo_multi](Ur::redo_multi).
-    ///
-    /// - `count < 0` => `self.undo_multi(-count)`.
-    /// - `0 < count` => `self.redo_multi(count)`.
-    pub fn jump(&mut self, count: isize) -> Option<&T> {
-        self.0.jump(count)
-    }
-
-    /// Takes a closure and update the internal state.
-    /// The closure consumes the current state and produces a new state.
-    ///
-    /// # Return
-    /// Immutable reference to the new state.
-    ///
-    /// # Remarks
-    /// The closure MUST produce a same result for a same input.
-    /// If it is impossible, use [try_edit](Ur::try_edit).
-    pub fn edit<F>(&mut self, command: F) -> &T
-    where
-        F: Fn(T) -> T + 'a,
-    {
-        self.0.edit(command)
-    }
-
-    /// Takes a closure and update the internal state.
-    /// The closure consumes the current state and produces a new state or [None].
-    /// If the closure returns [None], the internal state is not changed.
-    ///
-    /// # Return
-    /// Immutable reference to the new state or [None].
-    ///
-    /// # Remarks
-    /// The closure MUST produce a same result for a same input.
-    /// If it is impossible, use [try_edit](Ur::try_edit).
-    pub fn edit_if<F>(&mut self, command: F) -> Option<&T>
-    where
-        F: Fn(T) -> Option<T> + 'a,
-    {
-        self.0.edit_if(command)
-    }
-
-    /// Takes a closure and update the internal state.
-    /// The closure consumes the current state and produces a new state or an error.
-    /// If the closure returns an error, the internal state is not changed.
-    ///
-    /// # Return
-    /// Immutable reference to the new state or an error produced by the closure.
-    ///
-    /// # Remark
-    /// Unlike [edit](Ur::edit) and [edit_if](Ur::edit_if),
-    /// this method accepts closures that can never reproduce same output again.
-    /// After changing the internal state by the closure, a snapshot is taken for undoability.
-    ///
-    /// Generally, closures including following functions should use this method:
-    ///
-    /// - I/O
-    /// - IPC
-    /// - random
-    ///
-    /// etc.
-    pub fn try_edit<F>(&mut self, command: F) -> Result<&T, Box<dyn std::error::Error>>
+    fn try_edit<F>(&mut self, command: F) -> Result<&T, Box<dyn std::error::Error>>
     where
         F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,
     {
         self.0.try_edit(command)
+    }
+}
+
+impl<'a, T, S> IEdit<'a> for Ur<'a, T, S>
+where
+    T: Snapshot<Snapshot = S>,
+{
+    type State = T;
+
+    fn edit_if<F>(&mut self, command: F) -> Option<&T>
+    where
+        F: Fn(T) -> Option<T> + 'a,
+    {
+        self.0.edit_if(command)
     }
 }
 

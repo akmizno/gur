@@ -56,6 +56,7 @@
 mod agur;
 mod gur;
 mod history;
+mod interface;
 
 pub mod acur;
 pub mod aur;
@@ -64,3 +65,7 @@ pub mod metrics;
 pub mod snapshot;
 pub mod triggers;
 pub mod ur;
+
+pub mod prelude {
+    pub use crate::interface::*;
+}

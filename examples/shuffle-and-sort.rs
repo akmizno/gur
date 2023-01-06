@@ -1,4 +1,5 @@
 use gur::cur::{Cur, CurBuilder};
+use gur::prelude::*;
 use rand::prelude::*;
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Write};

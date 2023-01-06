@@ -1,4 +1,5 @@
 use crate::history::{History, Node};
+use crate::interface::*;
 use crate::metrics::Metrics;
 use crate::snapshot::SnapshotHandler;
 use crate::triggers::snapshot_trigger::snapshot_never;
@@ -25,21 +26,21 @@ where
             _snapshot_handler: PhantomData,
         }
     }
+}
 
-    pub(crate) fn capacity(mut self, capacity: usize) -> Self {
+impl<'a, T, S, H> IBuilder for GurBuilder<'a, T, S, H>
+where
+    H: SnapshotHandler<State = T, Snapshot = S>,
+{
+    type State = T;
+    type Target = Gur<'a, T, S, H>;
+
+    fn capacity(mut self, capacity: usize) -> Self {
         self.capacity = capacity;
         self
     }
 
-    pub(crate) fn snapshot_trigger<F>(mut self, f: F) -> Self
-    where
-        F: FnMut(&Metrics) -> bool + 'a,
-    {
-        self.snapshot_trigger = Some(Box::new(f));
-        self
-    }
-
-    pub(crate) fn build(self, initial_state: T) -> Gur<'a, T, S, H> {
+    fn build(self, initial_state: T) -> Gur<'a, T, S, H> {
         Gur::new(
             initial_state,
             self.capacity,
@@ -47,6 +48,20 @@ where
         )
     }
 }
+
+impl<'a, T, S, H> IBuilderTrigger<'a> for GurBuilder<'a, T, S, H>
+where
+    H: SnapshotHandler<State = T, Snapshot = S>,
+{
+    fn snapshot_trigger<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(&Metrics) -> bool + 'a,
+    {
+        self.snapshot_trigger = Some(Box::new(f));
+        self
+    }
+}
+
 impl<'a, T, S, H> Default for GurBuilder<'a, T, S, H>
 where
     H: SnapshotHandler<State = T, Snapshot = S>,
@@ -82,11 +97,7 @@ where
         unsafe { self.state.take().unwrap_unchecked() }
     }
 
-    pub(crate) fn into_inner(mut self) -> T {
-        self.take()
-    }
-
-    pub(crate) fn new(
+    fn new(
         initial_state: T,
         capacity: usize,
         snapshot_trigger: Box<dyn FnMut(&Metrics) -> bool + 'a>,
@@ -104,66 +115,6 @@ where
             history,
             snapshot_trigger,
             _snapshot_handler: PhantomData,
-        }
-    }
-
-    pub(crate) fn capacity(&self) -> Option<usize> {
-        let cap = self.history.capacity();
-        if 0 < cap {
-            Some(cap)
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn undoable_count(&self) -> usize {
-        self.history.len_before_current()
-    }
-    pub(crate) fn redoable_count(&self) -> usize {
-        self.history.len_after_current()
-    }
-
-    pub(crate) fn undo(&mut self) -> Option<&T> {
-        self.undo_multi(1)
-    }
-
-    pub(crate) fn undo_multi(&mut self, count: usize) -> Option<&T> {
-        if 0 == count {
-            // Nothing to do
-            return Some(self.get());
-        }
-
-        if self.undoable_count() < count as usize {
-            return None;
-        }
-
-        self.undo_impl(count);
-        Some(self.get())
-    }
-
-    pub(crate) fn redo(&mut self) -> Option<&T> {
-        self.redo_multi(1)
-    }
-
-    pub(crate) fn redo_multi(&mut self, count: usize) -> Option<&T> {
-        if 0 == count {
-            // Nothing to do
-            return Some(self.get());
-        }
-
-        if self.redoable_count() < count {
-            return None;
-        }
-
-        self.redo_impl(count);
-        Some(self.get())
-    }
-
-    pub(crate) fn jump(&mut self, count: isize) -> Option<&T> {
-        if count < 0 {
-            self.undo_multi(count.abs() as usize)
-        } else {
-            self.redo_multi(count as usize)
         }
     }
 
@@ -243,16 +194,105 @@ where
         self.history.set_current(target);
     }
 
-    pub(crate) fn edit<F>(&mut self, command: F) -> &T
+    fn edit_if_impl<F>(command: &F, old_state: T) -> Option<(T, Duration)>
     where
-        F: Fn(T) -> T + 'a,
+        F: Fn(T) -> Option<T> + 'a,
     {
-        // NOTE
-        // This call is guaranteed to succeed.
-        unsafe { self.edit_if(move |s| Some(command(s))).unwrap_unchecked() }
+        let now = Instant::now();
+        let new_state = command(old_state);
+        let elapsed = now.elapsed();
+
+        if let Some(new_state) = new_state {
+            Some((new_state, elapsed))
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, T, S, H> IUndoRedo for Gur<'a, T, S, H>
+where
+    H: SnapshotHandler<State = T, Snapshot = S>,
+{
+    type State = T;
+
+    fn into_inner(mut self) -> T {
+        self.take()
     }
 
-    pub(crate) fn edit_if<F>(&mut self, command: F) -> Option<&T>
+    fn capacity(&self) -> Option<usize> {
+        let cap = self.history.capacity();
+        if 0 < cap {
+            Some(cap)
+        } else {
+            None
+        }
+    }
+
+    fn undoable_count(&self) -> usize {
+        self.history.len_before_current()
+    }
+    fn redoable_count(&self) -> usize {
+        self.history.len_after_current()
+    }
+
+    fn undo_multi(&mut self, count: usize) -> Option<&T> {
+        if 0 == count {
+            // Nothing to do
+            return Some(self.get());
+        }
+
+        if self.undoable_count() < count as usize {
+            return None;
+        }
+
+        self.undo_impl(count);
+        Some(self.get())
+    }
+
+    fn redo_multi(&mut self, count: usize) -> Option<&T> {
+        if 0 == count {
+            // Nothing to do
+            return Some(self.get());
+        }
+
+        if self.redoable_count() < count {
+            return None;
+        }
+
+        self.redo_impl(count);
+        Some(self.get())
+    }
+
+    fn try_edit<F>(&mut self, command: F) -> Result<&T, Box<dyn std::error::Error>>
+    where
+        F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,
+    {
+        let old_state = self.take();
+        match command(old_state) {
+            Ok(new_state) => {
+                self.history
+                    .push_node(Node::from_snapshot(Box::new(H::to_snapshot(&new_state))));
+
+                self.state.replace(new_state);
+
+                Ok(self.get())
+            }
+            Err(e) => {
+                self.reset_state(self.history.current_index());
+                Err(e)
+            }
+        }
+    }
+}
+
+impl<'a, T, S, H> IEdit<'a> for Gur<'a, T, S, H>
+where
+    H: SnapshotHandler<State = T, Snapshot = S>,
+{
+    type State = T;
+
+    fn edit_if<F>(&mut self, command: F) -> Option<&T>
     where
         F: Fn(T) -> Option<T> + 'a,
     {
@@ -283,42 +323,6 @@ where
 
         self.state.replace(new_state);
         Some(self.get())
-    }
-
-    fn edit_if_impl<F>(command: &F, old_state: T) -> Option<(T, Duration)>
-    where
-        F: Fn(T) -> Option<T> + 'a,
-    {
-        let now = Instant::now();
-        let new_state = command(old_state);
-        let elapsed = now.elapsed();
-
-        if let Some(new_state) = new_state {
-            Some((new_state, elapsed))
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn try_edit<F>(&mut self, command: F) -> Result<&T, Box<dyn std::error::Error>>
-    where
-        F: FnOnce(T) -> Result<T, Box<dyn std::error::Error>>,
-    {
-        let old_state = self.take();
-        match command(old_state) {
-            Ok(new_state) => {
-                self.history
-                    .push_node(Node::from_snapshot(Box::new(H::to_snapshot(&new_state))));
-
-                self.state.replace(new_state);
-
-                Ok(self.get())
-            }
-            Err(e) => {
-                self.reset_state(self.history.current_index());
-                Err(e)
-            }
-        }
     }
 }
 

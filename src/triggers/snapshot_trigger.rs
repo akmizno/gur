@@ -10,6 +10,7 @@ use std::time::Duration;
 ///
 /// # Usage
 /// ```rust
+/// use gur::prelude::*;
 /// use gur::cur::{Cur, CurBuilder};
 /// use gur::metrics::Metrics;
 /// use gur::triggers::snapshot_trigger::snapshot_by_total_elapsed;
@@ -33,6 +34,7 @@ pub fn snapshot_by_total_elapsed(duration: Duration) -> impl Fn(&Metrics) -> boo
 ///
 /// # Usage
 /// ```rust
+/// use gur::prelude::*;
 /// use gur::cur::{Cur, CurBuilder};
 /// use gur::metrics::Metrics;
 /// use gur::triggers::snapshot_trigger::snapshot_by_distance;
@@ -51,10 +53,11 @@ pub fn snapshot_by_distance(distance: usize) -> impl Fn(&Metrics) -> bool {
 /// Creates a "always-on" snapshot trigger.
 ///
 /// The created closure returns true everytime.
-/// By using this trigger, snapshots will always been taken for each [Ur::edit](crate::ur::Ur::edit).
+/// By using this trigger, snapshots will always been taken for each [IEdit::edit](crate::interface::IEdit::edit).
 ///
 /// # Usage
 /// ```rust
+/// use gur::prelude::*;
 /// use gur::cur::{Cur, CurBuilder};
 /// use gur::metrics::Metrics;
 /// use gur::triggers::snapshot_trigger::snapshot_always;
@@ -73,13 +76,14 @@ pub fn snapshot_always() -> impl Fn(&Metrics) -> bool {
 /// Creates a "always-off" snapshot trigger.
 ///
 /// The created closure returns false everytime.
-/// By using this trigger, snapshots will never been taken for each [Ur::edit](crate::ur::Ur::edit).
+/// By using this trigger, snapshots will never been taken for each [IEdit::edit](crate::interface::IEdit::edit).
 ///
 /// # Remarks
-/// Even if you use this trigger, [Ur::try_edit](crate::ur::Ur::try_edit) takes snapshots.
+/// Even if you use this trigger, [IUndoRedo::try_edit](crate::interface::IUndoRedo::try_edit) takes snapshots.
 ///
 /// # Usage
 /// ```rust
+/// use gur::prelude::*;
 /// use gur::cur::{Cur, CurBuilder};
 /// use gur::metrics::Metrics;
 /// use gur::triggers::snapshot_trigger::snapshot_never;

@@ -9,12 +9,13 @@
 //! That is "snapshot triggers."
 //!
 //! The snapshot trigger is used for deciding whether a snapshot should be created for each change.
-//! This trigger will be called after updating the internal state in the [Ur::edit](crate::ur::Ur::edit).
+//! This trigger will be called after updating the internal state in the [IEdit::edit](crate::interface::IEdit::edit).
 //! When the trigger returns true,
 //! a snapshot is created from the state and is stored in the history instead of the command.
 //!
 //! Here is a simple example; a trigger based on elapsed time of changes.
 //! ```rust
+//! use gur::prelude::*;
 //! use gur::cur::{Cur, CurBuilder};
 //! use gur::metrics::Metrics;
 //! use std::time::Duration;
