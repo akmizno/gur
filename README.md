@@ -63,7 +63,7 @@ fn main() {
 ```
 Where `Cur<T>` is a type providing undo-redo functionality.
 The `MyState` is a type of user's application state.
-`MyState` implements the `Clone` trait to use it with `Cur<T>`.
+`MyState` implements the `Clone` trait required by `Cur<T>`.
 Then the variable `state` as type `Cur<MyState>` is created to get the ability to undo-redo.
 
 The `edit` takes a closure to change the variable.

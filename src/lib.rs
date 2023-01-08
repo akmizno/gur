@@ -29,17 +29,18 @@
 //!     assert_eq!("MyState", state.data);
 //! }
 //! ```
+//! Where [Cur\<T\>](crate::cur::Cur) is a type providing undo-redo functionality.
 //! The `MyState` is a type of user's application state.
-//! `MyState` implements the [Clone] trait to use it with [Cur](crate::cur::Cur).
-//! Then the variable `state : Cur<MyState>` is created to get the ability to undo-redo.
+//! `MyState` implements the [Clone] trait required by [Cur\<T\>](crate::cur::Cur).
+//! Then the variable `state` as type `Cur<MyState>` is created to get the ability to undo-redo.
 //!
 //! The [edit](crate::interface::IEdit::edit) takes a closure to change the variable.
-//! The closure is a function that consumes a current state and returns a new state.
-//! A previous state can be restored by calling the [undo](crate::interface::IUndoRedo::undo).
+//! The closure is a function that consumes a current state as internal type `MyState` and returns a new state.
+//! [undo](crate::interface::IUndoRedo::undo) can restore the previous state.
 //! The [redo](crate::interface::IUndoRedo::redo) is reverse operation of the [undo](crate::interface::IUndoRedo::undo).
 //!
-//! The [Cur](crate::cur::Cur) implements [Deref](std::ops::Deref).
-//! So its internal state can be accessed like `*state`.
+//! The [Cur\<T\>](crate::cur::Cur) implements [Deref](std::ops::Deref).
+//! So the variable can be used as like smart pointers.
 //!
 //! # `Ur` family
 //! [Ur](crate::ur::Ur) is a most basic type in this crate.
@@ -85,10 +86,9 @@
 //!
 //! The application state have changed in order of `t0`, `t1`, `t2`, and `t3`.
 //! Now, the current state is `t3`.
-//! In the sample history, a snapshot `s0`, a snapshot of initial state `t0`, have been created.
 //!
 //! Let us consider undoing the current state `t3` to its previous state `t2`.
-//! First, the system restores a old state from its snapshot at any point in the history.
+//! First, the system restores an old state from its snapshot at any point in the history.
 //! In this case, We would have to restore the state `t0` from `s0` because there is only one snapshot `s0`.
 //! Then the system reruns the commands (`c1` and `c2`) in order.
 //! Finally, the target state `t2` will be obtained.
