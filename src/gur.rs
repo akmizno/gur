@@ -353,3 +353,17 @@ where
         self.get()
     }
 }
+
+impl<'a, T, S, H> std::panic::UnwindSafe for Gur<'a, T, S, H>
+where
+    T: std::panic::UnwindSafe,
+    H: SnapshotHandler<State = T, Snapshot = S>,
+{
+}
+
+impl<'a, T, S, H> std::panic::RefUnwindSafe for Gur<'a, T, S, H>
+where
+    T: std::panic::RefUnwindSafe,
+    H: SnapshotHandler<State = T, Snapshot = S>,
+{
+}
