@@ -47,14 +47,14 @@
 //! Some variants are provided in this crate.
 //! The variants and their features are listed below.
 //!
-//! | Type                           | Trait bounds                               | Thread safety | Description                                                                   |
+//! | Type                           | Requirements                               | Thread safety | Description                                                                   |
 //! | :----------------------------- | :----------------------------------------- | :-----------: | :---------------------------------------------------------------------------- |
 //! | [Ur\<T\>](crate::ur::Ur)       | `T`: [Snapshot](crate::snapshot::Snapshot) | No            | A basic wrapper for types implementing [Snapshot](crate::snapshot::Snapshot). |
 //! | [Cur\<T\>](crate::cur::Cur)    | `T`: [Clone]                               | No            | Another simple wrapper for types implementing [Clone].                        |
 //! | [Aur\<T\>](crate::aur::Aur)    | `T`: [Snapshot](crate::snapshot::Snapshot) | Yes           | [Ur\<T\>](crate::ur::Ur) + [Send] + [Sync]                                    |
 //! | [Acur\<T\>](crate::acur::Acur) | `T`: [Clone]                               | Yes           | [Cur\<T\>](crate::cur::Cur) + [Send] + [Sync]                                 |
 //!
-//! ## Trait bounds
+//! ## Requirements
 //! For example, [Ur\<T\>](crate::ur::Ur) requires `T` implementing [Snapshot](crate::snapshot::Snapshot).
 //! On the other hand, [Cur\<T\>](crate::cur::Cur) requires [Clone] instead of [Snapshot](crate::snapshot::Snapshot) for simplicity.
 //!
