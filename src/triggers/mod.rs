@@ -1,7 +1,7 @@
 //! Triggers documentation
 //!
 //! # Snapshot trigger
-//! The generative approach described [here](crate#Generative&#32;approach) may cause performance problem.
+//! The generative approach described [here](crate#generative-approach) may cause performance problem.
 //! For example, undoing may take too long time if the commands are heavy computational tasks.
 //!
 //! The problem can be mitigated by taking snapshots frequently.
@@ -9,7 +9,7 @@
 //! That is "snapshot triggers."
 //!
 //! The snapshot trigger is used for deciding whether a snapshot should be created for each change.
-//! This trigger will be called after updating the internal state in the [IEdit::edit](crate::interface::IEdit::edit).
+//! This trigger will be called after updating the internal state in the [edit](crate::interface::IEdit::edit).
 //! When the trigger returns true,
 //! a snapshot is created from the state and is stored in the history instead of the command.
 //!
@@ -42,7 +42,7 @@
 //! ```
 //! The total computation time between two snapshots (e.g. c1 + c2 + ... + cm) is limited within
 //! 500 ms.
-//! Therefore, it is expected that any undo processes is completed within 500 ms.
+//! Therefore, it is expected that any undoing processes are completed within 500 ms.
 //!
 //! Some predefined triggers are found in [snapshot_trigger].
 pub mod snapshot_trigger;

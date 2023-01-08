@@ -1,9 +1,18 @@
+//! A basic undo-redo functionality.
 use crate::gur::{Gur, GurBuilder};
 use crate::interface::*;
 use crate::metrics::Metrics;
 use crate::snapshot::{Snapshot, TraitSnapshot};
 
 /// A builder to create an [Ur].
+///
+/// # Interface
+/// [UrBuilder] implements following interfaces.
+///
+/// - [IBuilder](crate::interface::IBuilder)
+/// - [ITrigger](crate::interface::ITrigger)
+///
+/// See the pages to view method list.
 #[derive(Default)]
 pub struct UrBuilder<'a, T, S>(GurBuilder<'a, T, S, TraitSnapshot<T, S>>)
 where
@@ -36,7 +45,7 @@ where
     }
 }
 
-impl<'a, T, S> IBuilderTrigger<'a> for UrBuilder<'a, T, S>
+impl<'a, T, S> ITrigger<'a> for UrBuilder<'a, T, S>
 where
     T: Snapshot<Snapshot = S>,
 {
@@ -50,6 +59,8 @@ where
 }
 
 /// A wrapper type providing basic undo-redo functionality.
+///
+/// See also [UrBuilder] and [Snapshot](crate::snapshot::Snapshot).
 ///
 /// # Sample code
 /// ```
@@ -79,7 +90,7 @@ where
 ///     assert_eq!("My", state.data);
 ///
 ///     // Change state
-///     state.edit(|state| MyState{ data: state.data + "State" });
+///     state.edit(|mut state| { state.data += "State"; state });
 ///     assert_eq!("MyState", state.data);
 ///
 ///     // Undo
@@ -91,12 +102,6 @@ where
 ///     assert_eq!("MyState", state.data);
 /// }
 /// ```
-/// The [edit](Ur::edit) method takes a closure to updating the internal state.
-/// The closure is a function that consumes a current state and returns a new state.
-/// A previous state can be restored by calling the [undo](Ur::undo).
-/// The [redo](Ur::redo) is reverse operation of the [undo](Ur::undo).
-///
-/// See also [UrBuilder] and [Snapshot](crate::snapshot::Snapshot) for some customization.
 ///
 /// # Information
 /// ## Snapshot trait
@@ -107,8 +112,13 @@ where
 /// It requires [Clone] instead of [Snapshot](crate::snapshot::Snapshot).
 /// See [Cur](crate::cur::Cur) for more detail.
 ///
-/// ## Deref
-/// [Ur] implements [Deref](std::ops::Deref).
+/// ## Interface
+/// [Ur] implements following undo-redo interfaces.
+///
+/// - [IUndoRedo](crate::interface::IUndoRedo)
+/// - [IEdit](crate::interface::IEdit)
+///
+/// See the pages to view method list.
 ///
 /// ## Thread-safety
 /// [Ur] does not implement [Send] and [Sync].

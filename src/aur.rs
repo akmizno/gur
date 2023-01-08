@@ -1,8 +1,18 @@
+//! Thread-safe [Ur\<T\>](crate::ur::Ur)
 use crate::agur::{Agur, AgurBuilder};
 use crate::interface::*;
 use crate::metrics::Metrics;
 use crate::snapshot::{Snapshot, TraitSnapshot};
 
+/// A builder to create an [Aur].
+///
+/// # Interface
+/// [AurBuilder] implements following interfaces.
+///
+/// - [IBuilder](crate::interface::IBuilder)
+/// - [ITriggerA](crate::interface::ITriggerA)
+///
+/// See the pages to view method list.
 #[derive(Default)]
 pub struct AurBuilder<'a, T, S>(AgurBuilder<'a, T, S, TraitSnapshot<T, S>>)
 where
@@ -34,7 +44,7 @@ where
     }
 }
 
-impl<'a, T, S> IBuilderTriggerA<'a> for AurBuilder<'a, T, S>
+impl<'a, T, S> ITriggerA<'a> for AurBuilder<'a, T, S>
 where
     T: Snapshot<Snapshot = S>,
 {
@@ -48,6 +58,70 @@ where
 }
 
 /// [Ur](crate::ur::Ur) + [Send] + [Sync]
+///
+/// See also [AurBuilder].
+///
+/// # Sample code
+/// ```
+/// use gur::prelude::*;
+/// use gur::aur::{Aur, AurBuilder};
+/// use gur::snapshot::Snapshot;
+///
+/// // Appication state
+/// #[derive(Clone)]
+/// struct MyState {
+///     data: String
+/// }
+///
+/// // Implementing Snapshot trait
+/// impl Snapshot for MyState {
+///     type Snapshot = String;
+///     fn to_snapshot(&self) -> Self::Snapshot {
+///         self.data.clone()
+///     }
+///     fn from_snapshot(snapshot: &Self::Snapshot) -> Self {
+///         MyState{ data: snapshot.clone() }
+///     }
+/// }
+///
+/// fn main() {
+///     // Initialize
+///     let mut state = AurBuilder::new().build(MyState{ data: "My".to_string() });
+///     assert_eq!("My", state.data);
+///
+///     // Change state
+///     state.edit(|mut state| { state.data += "State"; state });
+///     assert_eq!("MyState", state.data);
+///
+///     // Undo
+///     state.undo();
+///     assert_eq!("My", state.data);
+///
+///     // Redo
+///     state.redo();
+///     assert_eq!("MyState", state.data);
+/// }
+/// ```
+///
+/// # Information
+/// ## Snapshot trait
+/// [Aur] requires a type `T` implementing [Snapshot](crate::snapshot::Snapshot).
+/// The trait specifies conversion between `T` and its snapshot object.
+///
+/// [Acur](crate::acur::Acur) may be more suitable for simple types.
+/// It requires [Clone] instead of [Snapshot](crate::snapshot::Snapshot).
+/// See [Acur](crate::acur::Acur) for more detail.
+///
+/// ## Provided methods
+/// [Aur] implements following undo-redo interfaces.
+///
+/// - [IUndoRedo](crate::interface::IUndoRedo)
+/// - [IEditA](crate::interface::IEditA)
+///
+/// See the pages to view method list.
+///
+/// ## Thread-safety
+/// [Aur] implements [Send] and [Sync].
 pub struct Aur<'a, T, S>(Agur<'a, T, S, TraitSnapshot<T, S>>)
 where
     T: Snapshot<Snapshot = S>;

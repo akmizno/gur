@@ -34,7 +34,7 @@ where
     }
 }
 
-impl<'a, T, S, H> IBuilderTriggerA<'a> for AgurBuilder<'a, T, S, H>
+impl<'a, T, S, H> ITriggerA<'a> for AgurBuilder<'a, T, S, H>
 where
     H: SnapshotHandler<State = T, Snapshot = S>,
 {

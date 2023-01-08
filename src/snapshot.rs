@@ -1,3 +1,4 @@
+//! Snapshot
 use std::marker::PhantomData;
 
 /// A trait for ability to convert between an object and its snapshot.

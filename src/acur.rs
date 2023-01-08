@@ -1,8 +1,18 @@
+//! Thread-safe [Cur\<T\>](crate::cur::Cur)
 use crate::agur::{Agur, AgurBuilder};
 use crate::interface::*;
 use crate::metrics::Metrics;
 use crate::snapshot::CloneSnapshot;
 
+/// A builder to create an [Acur].
+///
+/// # Interface
+/// [AcurBuilder] implements following interfaces.
+///
+/// - [IBuilder](crate::interface::IBuilder)
+/// - [ITriggerA](crate::interface::ITriggerA)
+///
+/// See the pages to view method list.
 #[derive(Default)]
 pub struct AcurBuilder<'a, T: Clone>(AgurBuilder<'a, T, T, CloneSnapshot<T>>);
 
@@ -26,7 +36,7 @@ impl<'a, T: Clone> IBuilder for AcurBuilder<'a, T> {
     }
 }
 
-impl<'a, T: Clone> IBuilderTriggerA<'a> for AcurBuilder<'a, T> {
+impl<'a, T: Clone> ITriggerA<'a> for AcurBuilder<'a, T> {
     fn snapshot_trigger<F>(mut self, f: F) -> Self
     where
         F: FnMut(&Metrics) -> bool + Send + Sync + 'a,
@@ -37,6 +47,55 @@ impl<'a, T: Clone> IBuilderTriggerA<'a> for AcurBuilder<'a, T> {
 }
 
 /// [Cur](crate::cur::Cur) + [Send] + [Sync]
+///
+/// See also [AcurBuilder].
+///
+/// # Sample code
+/// ```
+/// use gur::prelude::*;
+/// use gur::acur::{Acur, AcurBuilder};
+///
+/// // Appication state
+/// #[derive(Clone)]
+/// struct MyState {
+///     data: String
+/// }
+///
+/// fn main() {
+///     // Initialize
+///     let mut state = AcurBuilder::new().build(MyState{ data: "My".to_string() });
+///     assert_eq!("My", state.data);
+///
+///     // Change state
+///     state.edit(|mut state| { state.data += "State"; state });
+///     assert_eq!("MyState", state.data);
+///
+///     // Undo
+///     state.undo();
+///     assert_eq!("My", state.data);
+///
+///     // Redo
+///     state.redo();
+///     assert_eq!("MyState", state.data);
+/// }
+/// ```
+///
+/// # Information
+/// ## Snapshot by Clone
+/// Unlike [Aur](crate::aur::Aur), [Acur] takes snapshots by [Clone].
+/// So [Acur] requires a type `T` implementing [Clone] instead of
+/// [Snapshot](crate::snapshot::Snapshot).
+///
+/// ## Provided methods
+/// [Acur] implements following undo-redo interfaces.
+///
+/// - [IUndoRedo](crate::interface::IUndoRedo)
+/// - [IEditA](crate::interface::IEditA)
+///
+/// See the pages to view method list.
+///
+/// ## Thread-safety
+/// [Acur] implements [Send] and [Sync].
 #[derive(Debug)]
 pub struct Acur<'a, T: Clone>(Agur<'a, T, T, CloneSnapshot<T>>);
 

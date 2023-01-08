@@ -1,3 +1,4 @@
+//! Metrics of commands
 use std::time::Duration;
 
 /// Metrics of commands.
@@ -5,7 +6,7 @@ use std::time::Duration;
 /// A trigger function is called for each command with this type of object.
 /// The trigger makes decisions whether a snapshot should be taken or not
 /// using the information in this type.
-/// See [Snapshot trigger](crate::triggers#Snapshot&#32;trigger) for more details.
+/// See [Snapshot trigger](crate::triggers#snapshot-trigger) for more details.
 #[derive(Clone, Debug)]
 pub struct Metrics {
     elapsed: Duration,
@@ -28,11 +29,10 @@ impl Metrics {
     /// c: command
     /// s: snapshot
     ///
-    /// elapsed() of
-    /// - c1: <-->
-    /// - c2:       <-->
-    /// - c3:             <-->
-    /// - c4:                   <-->
+    /// c1    <-->
+    /// c2          <-->
+    /// c3                <-->
+    /// c4                      <-->
     /// /--\  +--+  +--+  +--+  +--+
     /// |s0|--|c1|--|c2|--|c3|--|c4|
     /// \--/  +--+  +--+  +--+  +--+
@@ -47,11 +47,10 @@ impl Metrics {
     /// c: command
     /// s: snapshot
     ///
-    /// elapsed_from_snapshot() of
-    /// - c1: <-->
-    /// - c2: <-------->
-    /// - c3: <-------------->
-    /// - c4: <-------------------->
+    /// c1    <-->
+    /// c2    <-------->
+    /// c3    <-------------->
+    /// c4    <-------------------->
     /// /--\  +--+  +--+  +--+  +--+
     /// |s0|--|c1|--|c2|--|c3|--|c4|
     /// \--/  +--+  +--+  +--+  +--+
@@ -60,17 +59,16 @@ impl Metrics {
         self.elapsed_from_snapshot
     }
 
-    /// Distance from last snapshot.
+    /// Distance (number of commands) from last snapshot.
     ///
     /// ```txt
     /// c: command
     /// s: snapshot
     ///
-    /// distance_from_snapshot() of
-    /// - c1:   1
-    /// - c2:         2
-    /// - c3:               3
-    /// - c4:                     4
+    /// c1    1 command
+    /// c2    2 commands
+    /// c3    3 commands
+    /// c4    4 commands
     /// /--\  +--+  +--+  +--+  +--+
     /// |s0|--|c1|--|c2|--|c3|--|c4|
     /// \--/  +--+  +--+  +--+  +--+

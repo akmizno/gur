@@ -49,7 +49,7 @@ where
     }
 }
 
-impl<'a, T, S, H> IBuilderTrigger<'a> for GurBuilder<'a, T, S, H>
+impl<'a, T, S, H> ITrigger<'a> for GurBuilder<'a, T, S, H>
 where
     H: SnapshotHandler<State = T, Snapshot = S>,
 {

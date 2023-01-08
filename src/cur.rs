@@ -1,9 +1,18 @@
+//! Simplified [Ur\<T\>](crate::ur::Ur)
 use crate::gur::{Gur, GurBuilder};
 use crate::interface::*;
 use crate::metrics::Metrics;
 use crate::snapshot::CloneSnapshot;
 
 /// A builder to create an [Cur].
+///
+/// # Interface
+/// [CurBuilder] implements following interfaces.
+///
+/// - [IBuilder](crate::interface::IBuilder)
+/// - [ITrigger](crate::interface::ITrigger)
+///
+/// See the pages to view method list.
 #[derive(Default)]
 pub struct CurBuilder<'a, T: Clone>(GurBuilder<'a, T, T, CloneSnapshot<T>>);
 
@@ -28,7 +37,7 @@ impl<'a, T: Clone> IBuilder for CurBuilder<'a, T> {
     }
 }
 
-impl<'a, T: Clone> IBuilderTrigger<'a> for CurBuilder<'a, T> {
+impl<'a, T: Clone> ITrigger<'a> for CurBuilder<'a, T> {
     fn snapshot_trigger<F>(mut self, f: F) -> Self
     where
         F: FnMut(&Metrics) -> bool + 'a,
@@ -39,6 +48,8 @@ impl<'a, T: Clone> IBuilderTrigger<'a> for CurBuilder<'a, T> {
 }
 
 /// A wrapper type providing basic undo-redo functionality for [Clone] implementors.
+///
+/// See also [CurBuilder].
 ///
 /// # Sample code
 /// ```
@@ -57,7 +68,7 @@ impl<'a, T: Clone> IBuilderTrigger<'a> for CurBuilder<'a, T> {
 ///     assert_eq!("My", state.data);
 ///
 ///     // Change state
-///     state.edit(|state| MyState{ data: state.data + "State" });
+///     state.edit(|mut state| { state.data += "State"; state });
 ///     assert_eq!("MyState", state.data);
 ///
 ///     // Undo
@@ -69,7 +80,6 @@ impl<'a, T: Clone> IBuilderTrigger<'a> for CurBuilder<'a, T> {
 ///     assert_eq!("MyState", state.data);
 /// }
 /// ```
-/// See also [CurBuilder].
 ///
 /// # Information
 /// ## Snapshot by Clone
@@ -77,8 +87,13 @@ impl<'a, T: Clone> IBuilderTrigger<'a> for CurBuilder<'a, T> {
 /// So [Cur] requires a type `T` implementing [Clone] instead of
 /// [Snapshot](crate::snapshot::Snapshot).
 ///
-/// ## Deref
-/// [Cur] implements [Deref](std::ops::Deref).
+/// ## Provided methods
+/// [Cur] implements following undo-redo interfaces.
+///
+/// - [IUndoRedo](crate::interface::IUndoRedo)
+/// - [IEdit](crate::interface::IEdit)
+///
+/// See the pages to view method list.
 ///
 /// ## Thread-safety
 /// [Cur] does not implement [Send] and [Sync].
