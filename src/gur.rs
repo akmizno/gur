@@ -178,20 +178,12 @@ where
     }
 
     // Regenerate a target state from history WITHOUT reusing the current state.
-    fn reset_state(&mut self, target: usize) {
+    fn reset_state(&mut self, target_idx: usize) {
         // Drop the old state before running.
         self.state = None;
 
-        let mut it = self.history.iter_from_last_snapshot(target);
-        let snapshot = it.next().unwrap().generator().snapshot().unwrap();
-        let mut state = H::from_snapshot(snapshot);
-        for command_node in it {
-            let command = command_node.generator().command().unwrap();
-            state = command(state);
-        }
-
-        self.state = Some(state);
-        self.history.set_current(target);
+        self.state = Some(self.regenerate(target_idx));
+        self.history.set_current(target_idx);
     }
 
     fn edit_if_impl<F>(command: &F, old_state: T) -> Option<(T, Duration)>
